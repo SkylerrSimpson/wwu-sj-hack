@@ -1,0 +1,15 @@
+name: Bug
+description: Something on the demo path is wrong.
+labels: [bug]
+body:
+  - type: input
+    id: repro
+    attributes:
+      label: Repro
+      placeholder: Open /, type 98225, the list is empty.
+    validations:
+      required: true
+  - type: input
+    id: expected
+    attributes:
+      label: Expected

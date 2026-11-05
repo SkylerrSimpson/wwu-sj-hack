@@ -1,0 +1,22 @@
+{
+  "sources": [
+    {
+      "id": "sample",
+      "name": "Hand-written sample rows",
+      "url": "https://example.org",
+      "retrieved": "2026-11-04"
+    }
+  ],
+  "records": [
+    {
+      "id": "1",
+      "name": "First sample",
+      "source": "sample"
+    },
+    {
+      "id": "2",
+      "name": "Second sample",
+      "source": "sample"
+    }
+  ]
+}

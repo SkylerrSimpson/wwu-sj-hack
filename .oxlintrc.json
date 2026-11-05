@@ -1,0 +1,18 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  // TypeScript 7 has no JS compiler API, so type-aware ESLint rules cannot run here.
+  // oxlint-tsgolint's version tracks the compiler's: 7.0.2001 pairs with typescript 7.0.2.
+  "plugins": ["typescript", "unicorn", "oxc", "vitest"],
+  "categories": { "correctness": "error" },
+  "rules": {
+    "typescript/no-floating-promises": "error",
+    "typescript/await-thenable": "error",
+    "typescript/no-misused-promises": "error",
+    "typescript/no-explicit-any": "error",
+    "typescript/require-array-sort-compare": "error",
+    "no-unused-vars": "error",
+    // Vitest's expect(value, message) takes two arguments; the Jest default would flag that.
+    "vitest/valid-expect": ["error", { "maxArgs": 2 }]
+  },
+  "ignorePatterns": ["**/.next/**", "**/node_modules/**"]
+}

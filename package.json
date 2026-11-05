@@ -1,0 +1,26 @@
+{
+  "name": "wwu-sj-hack",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @hack/web dev",
+    "build:web": "pnpm --filter @hack/web build",
+    "typecheck": "pnpm --filter @hack/web typecheck",
+    "lint": "oxlint --type-aware --tsconfig apps/web/tsconfig.json apps/web",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^24",
+    "oxlint": "1.80.0",
+    "oxlint-tsgolint": "7.0.2001",
+    "prettier": "^3.9.6",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0"
+  },
+  "packageManager": "pnpm@12.15.0"
+}

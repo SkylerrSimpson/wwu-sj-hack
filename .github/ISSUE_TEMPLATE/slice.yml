@@ -1,0 +1,31 @@
+name: Slice
+description: One demoable step. The owner is the assignee.
+labels: [slice]
+body:
+  - type: input
+    id: demo
+    attributes:
+      label: In the demo
+      description: One sentence you could watch happen in the demo.
+      placeholder: The user types a zip code and sees the three nearest pantries open today.
+    validations:
+      required: true
+  - type: textarea
+    id: done
+    attributes:
+      label: Done when
+      value: |
+        - [ ]
+        - [ ]
+    validations:
+      required: true
+  - type: input
+    id: why
+    attributes:
+      label: Why it matters
+      placeholder: Who this helps, or what harm it prevents.
+  - type: textarea
+    id: out
+    attributes:
+      label: Out of scope
+      description: What this slice deliberately leaves for later or never.

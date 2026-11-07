@@ -1,0 +1,22 @@
+services:
+  streamer:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      STREAMER_HOST: 0.0.0.0
+      STREAMER_DB: /data/ais.db
+    # Reachable only from this machine. A tunnel or HTTPS proxy on it is what makes it public.
+    ports:
+      - "127.0.0.1:${STREAMER_PUBLISH_PORT:-8787}:8787"
+    # This folder is everything the service keeps: move it and the service moves.
+    volumes:
+      - "${STREAMER_DATA:-./data}:/data"
+    user: "${STREAMER_UID:-1000}:${STREAMER_GID:-1000}"
+    # Long enough for the recorder to finish writing what it holds.
+    stop_grace_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"

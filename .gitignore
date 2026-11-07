@@ -21,3 +21,4 @@ data/example_kml_usage.txt
 *.db
 *.db-wal
 *.db-shm
+apps/streamer/data/

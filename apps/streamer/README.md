@@ -2,62 +2,61 @@
 
 The live backend. It holds one connection to AISStream, keeps the latest state of each vessel in memory, records every accepted report to SQLite, and serves that state and its history to any number of clients.
 
-## Run
+## Run it anywhere
+
+It needs Docker and nothing else, on any Linux host. Keep the clock synced with NTP: all of a record's ages depend on it.
 
 ```sh
-cd apps/streamer
-uv sync
-AIS_API_KEY=... STREAMER_ID_SALT=... uv run python -m streamer
-```
-
-| Variable               | Default                       | What it does                                                                     |
-| ---------------------- | ----------------------------- | -------------------------------------------------------------------------------- |
-| `AIS_API_KEY`          | required                      | The AISStream key. Keep it in this machine's environment and nowhere else.       |
-| `STREAMER_ID_SALT`     | random on each start          | Keeps vessel ids stable across restarts. Set a long random value and keep it.    |
-| `STREAMER_DB`          | unset                         | Path to a SQLite file. Unset means nothing is recorded, and a warning is logged. |
-| `STREAMER_BOX`         | `48.60,-122.90,48.90,-122.40` | The area to watch: south, west, north, east.                                     |
-| `STREAMER_HOST`        | `127.0.0.1`                   | The address to listen on. Put a tunnel or HTTPS proxy in front of it.            |
-| `STREAMER_PORT`        | `8787`                        | The port to listen on.                                                           |
-| `STREAMER_CORS_ORIGIN` | `*`                           | Set this to the site's address once it has one.                                  |
-
-On a home lab, run it under something that restarts it, such as systemd or Docker, and keep the clock synced with NTP. All of a record's ages depend on that clock. The next section sets that up on Ubuntu.
-
-## Deploy on Ubuntu
-
-Run these on the server, in order.
-
-```sh
-sudo apt update && sudo apt install -y sqlite3 git curl openssl
-curl -LsSf https://astral.sh/uv/install.sh | sudo env UV_INSTALL_DIR=/usr/local/bin UV_NO_MODIFY_PATH=1 sh
-sudo useradd --system --home-dir /var/lib/lummi-streamer --shell /usr/sbin/nologin lummi
-sudo git clone <repo url> /opt/lummi-streamer
-sudo chown -R lummi:lummi /opt/lummi-streamer
-cd /opt/lummi-streamer/apps/streamer
-sudo -u lummi env UV_CACHE_DIR=/tmp/uv-cache uv sync --frozen --no-dev
-openssl rand -hex 32
-```
-
-Copy the `openssl` output into `STREAMER_ID_SALT`. Keep the salt: it keeps vessel ids stable across restarts.
-
-```sh
-sudo install -m 600 -o root -g root deploy/lummi-streamer.env.example /etc/lummi-streamer.env
-sudo nano /etc/lummi-streamer.env
-sudo install -m 644 deploy/lummi-streamer.service deploy/lummi-streamer-backup.service deploy/lummi-streamer-backup.timer /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now lummi-streamer.service lummi-streamer-backup.timer
+git clone <repo url> && cd <repo>/apps/streamer
+cp streamer.env.example .env   # then put your AISStream key in .env
+mkdir -p data
+docker compose up -d --build
 curl -s 127.0.0.1:8787/healthz
-timedatectl
 ```
 
-Fill in `AIS_API_KEY` and `STREAMER_ID_SALT` in the env file. `timedatectl` should say `System clock synchronized: yes`.
+It starts by itself after a reboot, and it records as soon as it's up. If your user isn't uid 1000, set `STREAMER_UID` and `STREAMER_GID` in `.env` to the output of `id -u` and `id -g`, so it can write to `data`.
 
-The database lives at `/var/lib/lummi-streamer/ais.db`, which systemd creates for the `lummi` user. It must be on a local disk, not NFS, because SQLite's WAL mode needs that. The backup timer runs daily at 03:30 and uses SQLite's online `.backup`, which is safe while the server writes. It keeps the last 7 files in `/var/lib/lummi-streamer/backups/`. Never copy the live database with `cp`: a WAL database copied that way can be corrupt.
+Everything the service keeps is in `data`: `ais.db`, and `id_salt.txt`, which keeps vessel ids stable. Keep `data` on a local disk, not a network share, because SQLite's write-ahead log needs that.
+
+## Move it to another host
+
+Nothing ties it to one machine. To move it, or to hand it to someone else:
+
+```sh
+docker compose down          # on the old host, so the last writes finish
+rsync -a data/ newhost:<repo>/apps/streamer/data/
+```
+
+Then follow the steps above on the new host, skipping `mkdir`. Vessel ids and history carry over, and the coverage record shows the time it was off as a gap. The site only needs its streamer address changed. Each host needs its own AISStream key, or the old one with the old host stopped: a key allows 3 connections.
+
+To copy the data while it keeps running, take a snapshot, which is one consistent file and is also the way to back up:
+
+```sh
+docker compose exec streamer python -m streamer.snapshot /data/ais.db /data/backups/ais.db
+```
+
+To stop hosting, run `docker compose down` and keep `data`. Never copy a running `ais.db` with `cp` or `rsync`: a copy taken mid-write can be corrupt.
+
+Whoever holds `data` holds real MMSIs of private boats, so treat handing it over as a decision, not a file transfer. Never serve it or commit it.
+
+## Settings
+
+Set these in `.env`.
+
+| Variable                | Default                       | What it does                                                                    |
+| ----------------------- | ----------------------------- | ------------------------------------------------------------------------------- |
+| `AIS_API_KEY`           | required                      | The AISStream key. Keep it in `.env` and nowhere else.                          |
+| `STREAMER_BOX`          | `48.60,-122.90,48.90,-122.40` | The area to watch: south, west, north, east. The example file sets a wider one. |
+| `STREAMER_CORS_ORIGIN`  | `*`                           | Set this to the site's address once it has one.                                 |
+| `STREAMER_PUBLISH_PORT` | `8787`                        | The port on this machine.                                                       |
+| `STREAMER_DATA`         | `./data`                      | The folder that holds everything the service keeps.                             |
+| `STREAMER_ID_SALT`      | from `id_salt.txt`            | Overrides the file. Rarely needed.                                              |
+
+To run without Docker, for development: `uv sync`, then `AIS_API_KEY=... STREAMER_DB=data/ais.db uv run python -m streamer`. Without `STREAMER_DB`, nothing is recorded.
 
 ### Expose it
 
-The live site needs public HTTPS, for example Tailscale Funnel or a Cloudflare Tunnel pointing at `127.0.0.1:8787`. Keep `STREAMER_HOST` at `127.0.0.1`, and set `STREAMER_CORS_ORIGIN` to the site's address. With nginx, turn proxy buffering off for `/v1/stream` (`proxy_buffering off;`), or events arrive in lumps.
-
-The database holds real MMSIs of private boats. Never serve it, and never copy it into the repo or a backup that leaves the server.
+The live site needs public HTTPS, for example Tailscale Funnel or a Cloudflare Tunnel pointing at `127.0.0.1:8787`. With nginx, turn proxy buffering off for `/v1/stream` (`proxy_buffering off;`), or events arrive in lumps.
 
 ## API
 
@@ -119,10 +118,10 @@ Private and unknown vessels show only type and length, their ids change each UTC
 ## Import NOAA files
 
 ```sh
-STREAMER_DB=/var/lib/lummi-streamer/ais.db uv run python -m streamer.noaa data/raw/ais-bulk/ais-*.csv.zst
+docker compose run --rm streamer python -m streamer.noaa --days 2026-06-30 2026-01-01 --workers 6
 ```
 
-It can run while the server is live, and importing a file twice changes nothing. It keeps 48.40 to 49.05 N, 123.20 to 122.40 W unless `NOAA_BOX` is set. A day imported later fills that stretch of `gaps`. Rows stay labeled by source, and counts from different sources are not comparable.
+It downloads each day, keeps only the area in `NOAA_BOX` (by default 48.40 to 49.05 N, 123.20 to 122.40 W), and discards the rest. Newest days go first, and days already imported are skipped, so interrupting it loses nothing: run the same line again. It can run while the service is live, and importing a day twice changes nothing. An imported day fills that stretch of `gaps`. Rows stay labeled by source, and counts from different sources are not comparable.
 
 ## Changing provider
 

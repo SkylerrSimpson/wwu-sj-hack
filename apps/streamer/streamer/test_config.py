@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from streamer.config import Box, load
@@ -46,3 +48,20 @@ def test_the_archive_path_is_optional() -> None:
     assert load({"AIS_API_KEY": "k", "STREAMER_DB": "/var/lib/x/ais.db"}).db_path == (
         "/var/lib/x/ais.db"
     )
+
+
+def test_the_salt_lives_beside_the_archive_so_the_folder_moves_whole(tmp_path: Path) -> None:
+    db = tmp_path / "new" / "ais.db"
+    env = {"AIS_API_KEY": "k", "STREAMER_DB": str(db)}
+    first = load(env).id_salt
+    assert (tmp_path / "new" / "id_salt.txt").exists()
+    assert load(env).id_salt == first
+    moved = tmp_path / "other"
+    (tmp_path / "new").rename(moved)
+    assert load({**env, "STREAMER_DB": str(moved / "ais.db")}).id_salt == first
+
+
+def test_a_salt_from_the_environment_still_wins(tmp_path: Path) -> None:
+    env = {"AIS_API_KEY": "k", "STREAMER_DB": str(tmp_path / "ais.db"), "STREAMER_ID_SALT": "s"}
+    assert load(env).id_salt == b"s"
+    assert not (tmp_path / "id_salt.txt").exists()

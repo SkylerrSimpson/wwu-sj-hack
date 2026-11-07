@@ -4,6 +4,7 @@ import logging
 import secrets
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from pathlib import Path
 
 log = logging.getLogger(__name__)
 
@@ -56,19 +57,33 @@ def parse_port(text: str) -> int:
     return port
 
 
+def id_salt(env: Mapping[str, str], db_path: str | None) -> bytes:
+    salt = env.get("STREAMER_ID_SALT", "")
+    if salt:
+        return salt.encode()
+    if db_path is None:
+        log.warning("STREAMER_ID_SALT is not set: vessel ids will change on every restart")
+        return secrets.token_bytes(32)
+    # Beside the archive, so moving that folder to another host keeps every vessel's id.
+    path = Path(db_path).parent / "id_salt.txt"
+    if not path.exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.touch(mode=0o600)
+        path.write_text(secrets.token_hex(32), encoding="ascii")
+    return path.read_text(encoding="ascii").strip().encode()
+
+
 def load(env: Mapping[str, str]) -> Config:
     api_key = env.get("AIS_API_KEY", "").strip()
     if not api_key:
         raise ValueError("AIS_API_KEY is not set")
-    salt = env.get("STREAMER_ID_SALT", "")
-    if not salt:
-        log.warning("STREAMER_ID_SALT is not set: vessel ids will change on every restart")
+    db_path = env.get("STREAMER_DB") or None
     return Config(
         api_key=api_key,
-        id_salt=salt.encode() or secrets.token_bytes(32),
+        id_salt=id_salt(env, db_path),
         box=parse_box(env.get("STREAMER_BOX", DEFAULT_BOX)),
         host=env.get("STREAMER_HOST", "127.0.0.1"),
         port=parse_port(env.get("STREAMER_PORT", "8787")),
         cors_origin=env.get("STREAMER_CORS_ORIGIN", "*"),
-        db_path=env.get("STREAMER_DB") or None,
+        db_path=db_path,
     )

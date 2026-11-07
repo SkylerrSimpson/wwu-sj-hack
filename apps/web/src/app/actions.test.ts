@@ -56,6 +56,20 @@ test("a watch-list entry says so in the subject and the text", async () => {
   expect(mail?.text).not.toMatch(/illegal/i);
 });
 
+test("an unidentified radar contact says radar saw it, with no AIS, and that the sensors are synthetic", async () => {
+  await sendAlert("officer@example.org", {
+    ...entry,
+    vesselId: "radar-7",
+    name: "Radar contact 7 (synthetic)",
+    status: "unidentified",
+  });
+  const mail = send.mock.calls[0]?.[0];
+  expect(mail?.subject).toBe("Lummi waters: unidentified boat entered");
+  expect(mail?.text).toBe(
+    "A boat seen by radar, with no AIS signal, entered Lummi waters: Radar contact 7 (synthetic), Thu, Dec 5, 2024, 5:30 AM PST, 48.77 N 122.70 W. Synthetic sensor data: corroborate before acting.",
+  );
+});
+
 test("without RESEND_API_KEY the caller is told and nothing is sent", async () => {
   delete process.env.RESEND_API_KEY;
   expect(await sendAlert("officer@example.org", entry)).toEqual({

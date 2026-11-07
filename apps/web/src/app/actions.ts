@@ -24,14 +24,27 @@ export async function sendAlert(
     return { ok: false, error: "Enter a valid email address" };
   const key = process.env.RESEND_API_KEY;
   if (!key) return { ok: false, error: "RESEND_API_KEY is not set" };
-  const watch = entry.status === "watch";
   const where = `${Math.abs(entry.lat).toFixed(2)} ${entry.lat < 0 ? "S" : "N"} ${Math.abs(entry.lon).toFixed(2)} ${entry.lon < 0 ? "W" : "E"}`;
+  const what = `${entry.name}, ${pacific.format(entry.t * 1000)}, ${where}`;
+  const mail = {
+    suspicious: {
+      subject: "Lummi waters: vessel entered",
+      text: `A vessel not on the approved list entered Lummi waters: ${what}. Self-reported AIS: corroborate before acting.`,
+    },
+    watch: {
+      subject: "Lummi waters: watch-list vessel entered",
+      text: `A vessel on your watch list entered Lummi waters: ${what}. Self-reported AIS: corroborate before acting.`,
+    },
+    unidentified: {
+      subject: "Lummi waters: unidentified boat entered",
+      text: `A boat seen by radar, with no AIS signal, entered Lummi waters: ${what}. Synthetic sensor data: corroborate before acting.`,
+    },
+  }[entry.status];
   try {
     const { error } = await new Resend(key).emails.send({
       from: "Lummi Vessel Tracker <onboarding@resend.dev>",
       to: address,
-      subject: watch ? "Lummi waters: watch-list vessel entered" : "Lummi waters: vessel entered",
-      text: `A vessel ${watch ? "on your watch list" : "not on the approved list"} entered Lummi waters: ${entry.name}, ${pacific.format(entry.t * 1000)}, ${where}. Self-reported AIS: corroborate before acting.`,
+      ...mail,
     });
     return error ? { ok: false, error: error.message } : { ok: true };
   } catch (e) {

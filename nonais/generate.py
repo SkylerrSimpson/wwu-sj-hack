@@ -1,18 +1,22 @@
 """Synthetic radar, thermal camera and LIDAR data for Lummi waters. The sensors are not real.
 
-Usage: python generate.py <repo data.json> <out dir>
+Usage: python generate.py <repo data.json> <out dir> <web file>
+  e.g. python generate.py ../apps/web/public/data.json . ../apps/web/public/sensors.json
 
 The sensors see two kinds of boat: the real AIS vessels in data.json (positions from their
 recorded tracks), and invented boats with no AIS. A radar track that matches no AIS vessel is
 the unidentified boat the proof of concept is about.
 
-Writes two files to <out dir>:
-- `detections.csv`: one row per sensor hit, flat for plotting. Each row has the sensor's
-  estimate (position, size, speed, boat or not, confidence) and the ground truth behind it;
-  `truth_ais_id` is the data.json vessel id when the object broadcasts AIS, else empty.
-- `sensors.json`: `sources`, `sensors` (where each sits and what it covers), `vessels` (radar
-  tracks of the boats, ids `radar-n`, same fields as data.json vessels), `truth` (each radar
-  track's object and AIS vessel id, for scoring a match only) and `detections` (the CSV rows).
+Writes two files to <out dir>, for plotting and scoring:
+- `detections.csv`: one row per sensor hit. Each row has the sensor's estimate (position,
+  size, speed, boat or not, confidence) and the ground truth behind it; `truth_ais_id` is the
+  data.json vessel id when the object broadcasts AIS, else empty.
+- `sensors.json`: `sources`, `sensors` (where each sits, what it covers, how noisy it is),
+  `vessels` (radar tracks of the boats, ids `radar-n`, same fields as data.json vessels) and
+  `truth` (each radar track's object and AIS vessel id, for scoring a match only).
+
+And <web file>, what the app reads: `sources`, the sensors' coverage, the radar tracks and the
+detections, with no ground truth.
 """
 
 import csv
@@ -33,6 +37,9 @@ MAX_GAP = 1800  # an AIS gap longer than this leaves the boat's position unknown
 DEFAULT_SIZE_M = 10  # for AIS vessels with no length
 T0 = int(datetime(2024, 12, 6, 5, 0, tzinfo=UTC).timestamp())  # 9 PM Pacific, Dec 5
 T_END = T0 + 6 * 3600
+
+COVERAGE_KEYS = ("id", "kind", "name", "lon", "lat", "range_m", "bearing_deg", "fov_deg")
+DETECTION_KEYS = ("t", "sensor", "kind", "lon", "lat", "size_m", "boat", "label", "confidence")
 
 SOURCE = {
     "id": "synthetic-sensors",
@@ -322,7 +329,7 @@ def tracks(rows: list[dict], objects: list[dict]) -> tuple[list[dict], dict[str,
     return vessels, truth
 
 
-def main(data_path: str, out_dir: str) -> None:
+def main(data_path: str, out_dir: str, web_path: str) -> None:
     data = json.loads(Path(data_path).read_text(encoding="utf-8"))
     ring = data["boundary"]["ring"]
     objects = ais_objects(data["vessels"]) + OBJECTS
@@ -353,20 +360,23 @@ def main(data_path: str, out_dir: str) -> None:
         writer = csv.DictWriter(f, fieldnames=list(rows[0]))
         writer.writeheader()
         writer.writerows(rows)
-    out_data = {
-        "sources": [SOURCE],
-        "sensors": SENSORS,
-        "vessels": vessels,
-        "truth": truth,
-        "detections": rows,
-    }
+    out_data = {"sources": [SOURCE], "sensors": SENSORS, "vessels": vessels, "truth": truth}
     (out / "sensors.json").write_text(json.dumps(out_data, indent=2) + "\n", encoding="utf-8")
+
+    # The app's copy carries what a real system would know: no ground truth, no sensor noise.
+    web_data = {
+        "sources": [SOURCE],
+        "sensors": [{k: s[k] for k in s if k in COVERAGE_KEYS} for s in SENSORS],
+        "vessels": vessels,
+        "detections": [{k: r[k] for k in DETECTION_KEYS} for r in rows],
+    }
+    Path(web_path).write_text(json.dumps(web_data, separators=(",", ":")), encoding="utf-8")
     n_ais = sum(t["ais_id"] is not None for t in truth.values())
     print(
         f"wrote {len(rows)} detections and {len(vessels)} radar tracks "
-        f"({n_ais} with AIS, {len(vessels) - n_ais} without) to {out}"
+        f"({n_ais} with AIS, {len(vessels) - n_ais} without) to {out} and {web_path}"
     )
 
 
 if __name__ == "__main__":
-    main(*sys.argv[1:3])
+    main(*sys.argv[1:4])

@@ -13,7 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { Path, Ship } from "@/components/ShipMap";
+import type { Coverage, Path, Ship } from "@/components/ShipMap";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -25,9 +25,19 @@ import {
   type Config,
 } from "@/lib/config";
 import type { Data, Vessel } from "@/lib/data";
+import {
+  corroboration,
+  echoCounts,
+  interpolateAt,
+  matchAis,
+  radarEntries,
+  wedge,
+} from "@/lib/fusion";
+import type { SensorData } from "@/lib/sensors";
 import { STATUS_WORD, type ShipStatus } from "@/lib/status";
 import {
   inLummiWaters,
+  isInside,
   newEntries,
   positionAt,
   summary,
@@ -38,6 +48,7 @@ import {
 const ShipMap = dynamic(() => import("./ShipMap"), { ssr: false });
 
 const SPEEDS = [60, 600, 3600];
+const SENSOR_LABEL = { radar: "Radar", camera: "Thermal camera", lidar: "LIDAR" };
 const TICK_MS = 250;
 const STORAGE_KEY = "vesselConfig";
 
@@ -104,6 +115,41 @@ function ReplayView({ data }: { data: Data }) {
 
   const lists = useMemo(() => listsFor(data.vessels, config), [data.vessels, config]);
 
+  // The synthetic radar, camera and LIDAR load only when switched on, so the AIS replay never
+  // depends on them.
+  const [sensorsOn, setSensorsOn] = useState(false);
+  const [sensors, setSensors] = useState<SensorData | null>(null);
+  const [sensorsFailed, setSensorsFailed] = useState(false);
+  useEffect(() => {
+    if (!sensorsOn || sensors) return;
+    fetch("/sensors.json")
+      .then((r) =>
+        r.ok ? (r.json() as Promise<SensorData>) : Promise.reject(new Error(r.statusText)),
+      )
+      .then(setSensors)
+      .catch(() => setSensorsFailed(true));
+  }, [sensorsOn, sensors]);
+
+  // Matching runs once per load: a radar track is identified when an AIS vessel sits on it.
+  const radar = useMemo(() => {
+    if (!sensors) return null;
+    const matched = new Map(sensors.vessels.map((v) => [v.id, matchAis(v, data.vessels)]));
+    const unknown = sensors.vessels.filter((v) => matched.get(v.id) === null);
+    const coverage: Coverage[] = sensors.sensors.map((s) => ({
+      id: s.id,
+      name: s.name,
+      label: SENSOR_LABEL[s.kind],
+      lon: s.lon,
+      lat: s.lat,
+      range_m: s.range_m,
+      ring: s.fov_deg === undefined ? undefined : wedge(s),
+    }));
+    const firstEntry = radarEntries(unknown, data.boundary.ring, 0, Infinity)[0]?.t;
+    return { sensors, matched, unknown, coverage, firstEntry };
+  }, [sensors, data.vessels, data.boundary.ring]);
+  const shown = sensorsOn ? radar : null;
+  const unknown = useMemo(() => shown?.unknown ?? [], [shown]);
+
   useEffect(() => {
     if (!playing) return;
     const id = setInterval(() => setT((p) => Math.min(end, p + speed / (1000 / TICK_MS))), TICK_MS);
@@ -118,14 +164,17 @@ function ReplayView({ data }: { data: Data }) {
     const from = prevT.current;
     prevT.current = t;
     if (t <= from) return;
-    const found = newEntries(data.vessels, data.boundary.ring, from, t, lists);
+    const found = [
+      ...newEntries(data.vessels, data.boundary.ring, from, t, lists),
+      ...radarEntries(unknown, data.boundary.ring, from, t),
+    ].sort((a, b) => a.t - b.t);
     if (!found.length) return;
     // Scrubbing back and playing again crosses the same fixes; the alert log must not repeat them.
     setEntries((e) => {
       const seen = new Set(e.map((x) => `${x.vesselId}:${x.t}`));
       return [...e, ...found.filter((x) => !seen.has(`${x.vesselId}:${x.t}`))];
     });
-  }, [t, data, lists]);
+  }, [t, data, lists, unknown]);
 
   const suspicious = new Set(
     entries.filter((e) => e.status === "suspicious").map((e) => e.vesselId),
@@ -163,6 +212,29 @@ function ReplayView({ data }: { data: Data }) {
         ]
       : [];
   });
+  const contacts: Ship[] = unknown.flatMap((v) => {
+    const p = positionAt(v.track, t);
+    const type = `about ${v.length_m} m by radar, no AIS`;
+    return p
+      ? [
+          {
+            id: v.id,
+            name: v.name,
+            type,
+            lengthM: v.length_m,
+            callsign: "",
+            status: "unidentified",
+            lon: p[0],
+            lat: p[1],
+          },
+        ]
+      : [];
+  });
+  const contactsInside = contacts.filter((c) => isInside(c.lon, c.lat, data.boundary.ring));
+  const radarNow = shown?.sensors.vessels.filter((v) => positionAt(v.track, t)) ?? [];
+  const echoes = shown ? echoCounts(shown.sensors.detections, t) : null;
+  const contact = unknown.find((v) => v.id === selected);
+  const radarStart = shown?.firstEntry;
 
   return (
     <div className="grid gap-4 lg:grid-cols-3">
@@ -187,6 +259,19 @@ function ReplayView({ data }: { data: Data }) {
           {demoStart !== undefined && (
             <Button size="sm" variant="outline" onClick={() => setT(demoStart - 300)}>
               Skip to the demo vessel
+            </Button>
+          )}
+          <label className="flex items-center gap-1">
+            <input
+              type="checkbox"
+              checked={sensorsOn}
+              onChange={(e) => setSensorsOn(e.target.checked)}
+            />
+            Synthetic radar, camera and LIDAR
+          </label>
+          {radarStart !== undefined && (
+            <Button size="sm" variant="outline" onClick={() => setT(radarStart - 600)}>
+              Skip to the radar contact
             </Button>
           )}
           <span className="font-mono" aria-live="polite">
@@ -216,8 +301,9 @@ function ReplayView({ data }: { data: Data }) {
         />
         <ShipMap
           ring={data.boundary.ring}
-          ships={ships}
+          ships={[...ships, ...contacts]}
           paths={paths}
+          coverage={shown?.coverage}
           selectedId={selected}
           onSelect={setSelected}
         />
@@ -227,8 +313,38 @@ function ReplayView({ data }: { data: Data }) {
           {STATUS_WORD.watch}. Orange: {STATUS_WORD.suspicious}. Grey: {STATUS_WORD.unlisted}. Hover
           a dot for its name and status.
         </p>
+        {sensorsOn && !shown && (
+          <p className="mt-1 text-xs" role={sensorsFailed ? "alert" : undefined} aria-live="polite">
+            {sensorsFailed
+              ? "The synthetic sensor data could not be loaded."
+              : "Loading the synthetic sensor data..."}
+          </p>
+        )}
+        {shown && echoes && (
+          <p className="mt-1 text-xs text-purple-900">
+            Synthetic sensors, invented for this demo and placed by eye; the AIS is recorded. Dashed
+            purple: what each sensor covers. Large hollow ring: {STATUS_WORD.unidentified}, a boat
+            radar sees that no AIS vessel matches. Radar now: {radarNow.length} boats,{" "}
+            {radarNow.length - contacts.length} matched to AIS, {contacts.length} unidentified.
+            Echoes so far: {echoes.echoes}, of which {echoes.dropped} judged birds, debris or sea
+            clutter and dropped.{" "}
+            {shown.sensors.sources.map((s) => (
+              <a key={s.id} className="underline" href={s.url}>
+                {s.name}, {s.retrieved}
+              </a>
+            ))}
+          </p>
+        )}
       </div>
       <div className="space-y-4">
+        {contact && shown && (
+          <RadarContact
+            contact={contact}
+            sensors={shown.sensors}
+            t={t}
+            onClose={() => setSelected(null)}
+          />
+        )}
         {picked && (
           <Card
             key={picked.id}
@@ -270,7 +386,9 @@ function ReplayView({ data }: { data: Data }) {
         )}
         <Card>
           <CardHeader>
-            <CardTitle>In Lummi waters now ({rows.reduce((n, r) => n + r.count, 0)})</CardTitle>
+            <CardTitle>
+              In Lummi waters now ({rows.reduce((n, r) => n + r.count, 0) + contactsInside.length})
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <Table>
@@ -282,6 +400,20 @@ function ReplayView({ data }: { data: Data }) {
                 </TableRow>
               </TableHeader>
               <TableBody>
+                {contactsInside.length > 0 && (
+                  <TableRow className="animate-in fade-in slide-in-from-bottom-1 duration-300 motion-reduce:animate-none">
+                    <TableCell>
+                      <Badge variant="destructive">{STATUS_WORD.unidentified}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      Boat with no AIS (synthetic)
+                      <span className="block text-xs text-neutral-600">
+                        {contactsInside.map((c) => c.name).join(", ")}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right">{contactsInside.length}</TableCell>
+                  </TableRow>
+                )}
                 {rows.map((r) => (
                   <TableRow
                     key={`${r.status}:${r.label}`}
@@ -314,12 +446,69 @@ function ReplayView({ data }: { data: Data }) {
         <ConfigPanel
           vessels={data.vessels.map((v) => ({ id: v.id, name: v.name }))}
           config={config}
-          selected={selected}
+          selected={contact ? null : selected}
           onSelect={setSelected}
           onChange={setConfig}
         />
         <AlertPanel entries={entries} />
       </div>
     </div>
+  );
+}
+
+const percent = (x: number) => `${Math.round(x * 100)}%`;
+
+// What the tool knows about a boat radar sees and AIS doesn't: its size, where it is, and what
+// the camera and LIDAR made of that spot. Never who it is.
+function RadarContact({
+  contact,
+  sensors,
+  t,
+  onClose,
+}: {
+  contact: Vessel;
+  sensors: SensorData;
+  t: number;
+  onClose: () => void;
+}) {
+  const p = interpolateAt(contact.track, t);
+  const sightings = p ? corroboration(sensors.detections, p[0], p[1], t) : [];
+  const sensorName = (id: string) => sensors.sensors.find((s) => s.id === id)?.name ?? id;
+  return (
+    <Card
+      key={contact.id}
+      className="animate-in fade-in slide-in-from-bottom-1 text-sm duration-300 motion-reduce:animate-none"
+    >
+      <CardHeader className="flex items-start justify-between gap-2">
+        <CardTitle>{contact.name}</CardTitle>
+        <Button size="sm" variant="outline" onClick={onClose}>
+          Close
+        </Button>
+      </CardHeader>
+      <CardContent>
+        <p>
+          About {contact.length_m} m long by radar. No AIS signal matches this contact, so the tool
+          can&apos;t say whose boat it is.
+        </p>
+        {!p ? (
+          <p className="mt-1">Radar doesn&apos;t see it at this time.</p>
+        ) : sightings.length === 0 ? (
+          <p className="mt-1">No camera or LIDAR sees this spot right now.</p>
+        ) : (
+          <ul className="mt-1 list-disc pl-5">
+            {sightings.map((s) => (
+              <li key={s.sensor}>
+                {sensorName(s.sensor)}: {s.boat ? "a boat" : "not a boat"} ({s.label}),{" "}
+                {percent(s.confidence)} sure
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="mt-1 text-xs text-neutral-600">
+          Synthetic sensor data. Radar can&apos;t identify a boat or its operator: corroborate
+          before acting.
+        </p>
+      </CardContent>
+    </Card>
   );
 }

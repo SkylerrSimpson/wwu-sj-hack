@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { STATUS_WORD } from "@/lib/status";
 import type { Entry } from "@/lib/vessel";
 
 type Attempt = { key: string; entry: Entry; result: string };
@@ -97,8 +98,8 @@ export default function AlertPanel({ entries }: { entries: Entry[] }) {
               key={a.key}
               className="animate-in fade-in slide-in-from-bottom-1 duration-300 motion-reduce:animate-none"
             >
-              {pacific.format(a.entry.t * 1000)}: {a.entry.name},{" "}
-              {a.entry.status === "watch" ? "watch list" : "suspicious"}, {a.result}
+              {pacific.format(a.entry.t * 1000)}: {a.entry.name}, {STATUS_WORD[a.entry.status]},{" "}
+              {a.result}
             </li>
           ))}
         </ol>

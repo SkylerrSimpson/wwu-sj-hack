@@ -12,6 +12,7 @@ export type Ship = {
   lon: number;
   lat: number;
 };
+export type Path = { id: string; status: ShipStatus; latLngs: [number, number][] };
 
 const STATUS_COLOR: Record<ShipStatus, string> = {
   priority: "#1d4ed8",
@@ -24,15 +25,20 @@ const STATUS_COLOR: Record<ShipStatus, string> = {
 export default function ShipMap({
   ring,
   ships,
+  paths = [],
+  selectedId = null,
   onSelect,
 }: {
   ring: number[][];
   ships: Ship[];
+  paths?: Path[];
+  selectedId?: string | null;
   onSelect?: (id: string) => void;
 }) {
   const div = useRef<HTMLDivElement>(null);
   const map = useRef<L.Map | null>(null);
   const markers = useRef(new Map<string, L.CircleMarker>());
+  const pathLayer = useRef<L.LayerGroup | null>(null);
   const select = useRef(onSelect);
 
   useEffect(() => {
@@ -46,6 +52,9 @@ export default function ShipMap({
       attribution:
         '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     }).addTo(m);
+    // Paths sit on their own pane under the overlay pane (z 400), so dots always draw on top.
+    m.createPane("paths").style.zIndex = "350";
+    pathLayer.current = L.layerGroup().addTo(m);
     const latLngs: [number, number][] = ring.map(([lon = 0, lat = 0]) => [lat, lon]);
     L.polygon(latLngs, { color: "#b91c1c", weight: 2, fill: false }).addTo(m);
     m.fitBounds(latLngs);
@@ -54,9 +63,25 @@ export default function ShipMap({
     return () => {
       m.remove();
       created.clear();
+      pathLayer.current = null;
       map.current = null;
     };
   }, [ring]);
+
+  useEffect(() => {
+    const layer = pathLayer.current;
+    if (!layer) return;
+    layer.clearLayers();
+    for (const p of paths) {
+      const selected = p.id === selectedId;
+      L.polyline(p.latLngs, {
+        pane: "paths",
+        color: STATUS_COLOR[p.status],
+        weight: selected ? 3 : 1,
+        opacity: selected ? 0.9 : 0.5,
+      }).addTo(layer);
+    }
+  }, [paths, selectedId]);
 
   // Markers are moved in place each tick; a vessel with no position is removed.
   useEffect(() => {
@@ -75,7 +100,11 @@ export default function ShipMap({
         markers.current.set(s.id, marker);
       }
       marker.setLatLng([s.lat, s.lon]);
-      marker.setStyle({ color: STATUS_COLOR[s.status], fillColor: STATUS_COLOR[s.status] });
+      marker.setStyle({
+        color: STATUS_COLOR[s.status],
+        fillColor: STATUS_COLOR[s.status],
+        radius: s.id === selectedId ? 8 : 5,
+      });
       marker.setTooltipContent(`${s.name} (${s.type}), ${STATUS_WORD[s.status]}`);
     }
     for (const [id, marker] of markers.current) {
@@ -83,7 +112,7 @@ export default function ShipMap({
       marker.remove();
       markers.current.delete(id);
     }
-  }, [ships]);
+  }, [ships, selectedId]);
 
   return (
     <div

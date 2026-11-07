@@ -13,7 +13,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { Ship } from "@/components/ShipMap";
+import type { Path, Ship } from "@/components/ShipMap";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   DEFAULT_CONFIG,
   labelOf,
@@ -76,6 +77,7 @@ function ReplayView({ data }: { data: Data }) {
   const [speed, setSpeed] = useState(600);
   const [config, setConfig] = useState<Config>(DEFAULT_CONFIG);
   const [selected, setSelected] = useState<string | null>(null);
+  const [showPaths, setShowPaths] = useState(false);
   const [entries, setEntries] = useState<Entry[]>([]);
   const prevT = useRef(start);
   const loaded = useRef(false);
@@ -128,6 +130,15 @@ function ReplayView({ data }: { data: Data }) {
   const rows = summary(inLummiWaters(data.vessels, data.boundary.ring, t, lists), (v) =>
     labelOf(v, config),
   );
+  const paths: Path[] = showPaths
+    ? data.vessels.map((v) => ({
+        id: v.id,
+        status: statusOf(v),
+        latLngs: v.track.map(([, lon = 0, lat = 0]) => [lat, lon]),
+      }))
+    : [];
+  const picked = data.vessels.find((v) => v.id === selected);
+  const pickedPos = picked ? positionAt(picked.track, t) : null;
   const ships: Ship[] = data.vessels.flatMap((v) => {
     const p = positionAt(v.track, t);
     return p
@@ -163,6 +174,14 @@ function ReplayView({ data }: { data: Data }) {
           <span className="font-mono" aria-live="polite">
             {clock.format(t * 1000)}
           </span>
+          <label className="ml-auto flex items-center gap-1">
+            <input
+              type="checkbox"
+              checked={showPaths}
+              onChange={(e) => setShowPaths(e.target.checked)}
+            />
+            Show paths
+          </label>
         </div>
         <label htmlFor="time" className="sr-only">
           Replay time
@@ -177,7 +196,13 @@ function ReplayView({ data }: { data: Data }) {
           value={t}
           onChange={(e) => setT(Number(e.target.value))}
         />
-        <ShipMap ring={data.boundary.ring} ships={ships} onSelect={setSelected} />
+        <ShipMap
+          ring={data.boundary.ring}
+          ships={ships}
+          paths={paths}
+          selectedId={selected}
+          onSelect={setSelected}
+        />
         <p className="mt-1 text-xs text-neutral-600">
           Recorded AIS, {data.window.start.slice(0, 10)} to {data.window.end.slice(0, 10)} (UTC);{" "}
           {ships.length} vessels transmitting now. Blue: {STATUS_WORD.priority}. Red:{" "}
@@ -186,6 +211,42 @@ function ReplayView({ data }: { data: Data }) {
         </p>
       </div>
       <div className="space-y-4">
+        {picked && (
+          <Card>
+            <CardHeader>
+              <CardTitle>{picked.name}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+                <dt className="text-neutral-600">Status</dt>
+                <dd>{STATUS_WORD[statusOf(picked)]}</dd>
+                <dt className="text-neutral-600">Type</dt>
+                <dd>
+                  {picked.type}
+                  {picked.length_m ? `, ${picked.length_m} m` : ""}
+                </dd>
+                <dt className="text-neutral-600">Call sign</dt>
+                <dd>{picked.callsign || "not broadcast"}</dd>
+                <dt className="text-neutral-600">Fleet</dt>
+                <dd>{labelOf(picked, config)}</dd>
+                <dt className="text-neutral-600">AIS id</dt>
+                <dd>{picked.id}</dd>
+                <dt className="text-neutral-600">Seen</dt>
+                <dd>
+                  {clock.format((picked.track[0]?.[0] ?? 0) * 1000)} to{" "}
+                  {clock.format((picked.track.at(-1)?.[0] ?? 0) * 1000)}, {picked.track.length}{" "}
+                  positions
+                </dd>
+                <dt className="text-neutral-600">Now</dt>
+                <dd>
+                  {pickedPos
+                    ? `${pickedPos[1].toFixed(4)} N ${(-pickedPos[0]).toFixed(4)} W`
+                    : "not transmitting"}
+                </dd>
+              </dl>
+            </CardContent>
+          </Card>
+        )}
         <section
           aria-labelledby="inwater-heading"
           className="rounded border border-neutral-300 p-3"

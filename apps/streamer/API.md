@@ -293,14 +293,17 @@ For plots: the `reports` counts in `/v1/activity`, and the rows in `/v1/reports`
 
 ## What data exists
 
-A snapshot from 2026-11-07 about 21:10Z. A NOAA import is still running, so call `/v1/coverage` for the current answer.
+The archive as of 2026-11-07, 21:25Z, when the NOAA import was stopped: 17.2 million reports from 5,771 vessels. Call `/v1/coverage` for the current answer, since live recording keeps adding to it.
 
-- **NOAA, continuous:** 2026-05-16 to 2026-06-30, apart from small holes being refilled, and the import is working back toward 2026-01-01. About 230,000 reports and 850 vessels a day.
-- **NOAA, one day a month:** the 17th of July 2025, then roughly monthly to 2026-05-03.
-- **The seam:** nothing from 2026-07-01 until live recording began. NOAA hasn't published those months yet; importing them later fills the gap.
-- **AISStream live:** since 2026-11-07 about 20:47Z, with a 2-minute outage near 21:08Z when the laptop lost its connection. Coverage treats silences under 5 minutes as normal quiet, so that outage doesn't show as a gap.
+| Period                                | Source    | What's there                                                                                                                               |
+| ------------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| 2026-04-27 to 2026-06-30              | NOAA      | Every day, 65 days. The best stretch for trends. June 4 has only its first 14 hours, because NOAA's own file stops there.                  |
+| 2026-04-19, and 2026-04-21 to 04-24   | NOAA      | Whole days. 04-20, 04-25 and 04-26 are missing, because the import stopped during them.                                                    |
+| 2025-07-17 to 2026-04-04              | NOAA      | One day a month: 07-17, 08-15, 09-13, 10-12, 11-10, 12-09, 01-07, 02-05, 03-06, 04-04. Good for seasonal comparison, not for daily trends. |
+| 2026-07-01 until live recording began | none      | NOAA hasn't published these months yet.                                                                                                    |
+| 2026-11-07 20:47Z onward              | AISStream | Live, while the recorder runs. A 2-minute outage near 21:08Z is under the 5-minute threshold, so it doesn't show as a gap.                 |
 
-Each NOAA segment runs hour by hour, so a hole inside a day shows as a gap rather than being papered over.
+About 230,000 reports and 850 vessels a day in NOAA's data. Each NOAA segment runs hour by hour, so a hole inside a day shows as a gap rather than being papered over. Rerunning the import fills the missing days without duplicating anything: see "Import NOAA files" in `README.md`.
 
 ## Examples
 

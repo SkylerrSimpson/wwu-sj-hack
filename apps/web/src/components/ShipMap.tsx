@@ -15,42 +15,15 @@ export type Ship = {
   lat: number;
 };
 export type Path = { id: string; status: ShipStatus; latLngs: [number, number][] };
-// A sensor's field of view: a circle of range_m around it.
-export type Coverage = {
-  id: string;
-  name: string;
-  // Short, shown on the map at the sensor's site
-  label: string;
-  lon: number;
-  lat: number;
-  range_m: number;
-};
+// A sensor site and the circle it covers
+export type Coverage = { id: string; name: string; lon: number; lat: number; rangeM: number };
 
 const STATUS_COLOR: Record<ShipStatus, string> = {
   priority: "#15803d",
   watch: "#b91c1c",
   suspicious: "#d97706",
   unlisted: "#737373",
-  unidentified: "#7e22ce",
 };
-
-// An unidentified radar contact is a larger hollow ring, so it never relies on colour alone.
-const markerStyle = (status: ShipStatus, selected: boolean): L.CircleMarkerOptions =>
-  status === "unidentified"
-    ? {
-        radius: selected ? 10 : 8,
-        weight: 3,
-        color: STATUS_COLOR[status],
-        fillColor: "#fff",
-        fillOpacity: 0.6,
-      }
-    : {
-        radius: selected ? 8 : 5,
-        weight: 1,
-        color: STATUS_COLOR[status],
-        fillColor: STATUS_COLOR[status],
-        fillOpacity: 0.85,
-      };
 
 // The only module that knows Leaflet. Loaded with ssr: false, because Leaflet touches window on import.
 export default function ShipMap({
@@ -72,7 +45,7 @@ export default function ShipMap({
   const map = useRef<L.Map | null>(null);
   const markers = useRef(new Map<string, L.CircleMarker>());
   const pathLayer = useRef<L.LayerGroup | null>(null);
-  const sensorLayer = useRef<L.LayerGroup | null>(null);
+  const coverageLayer = useRef<L.LayerGroup | null>(null);
   const select = useRef(onSelect);
 
   useEffect(() => {
@@ -89,7 +62,7 @@ export default function ShipMap({
     // Paths sit on their own pane under the overlay pane (z 400), so dots always draw on top.
     m.createPane("paths").style.zIndex = "350";
     pathLayer.current = L.layerGroup().addTo(m);
-    sensorLayer.current = L.layerGroup().addTo(m);
+    coverageLayer.current = L.layerGroup().addTo(m);
     const latLngs: [number, number][] = ring.map(([lon = 0, lat = 0]) => [lat, lon]);
     L.polygon(latLngs, { color: "#b91c1c", weight: 2, fill: false }).addTo(m);
     m.fitBounds(latLngs);
@@ -99,27 +72,31 @@ export default function ShipMap({
       m.remove();
       created.clear();
       pathLayer.current = null;
-      sensorLayer.current = null;
+      coverageLayer.current = null;
       map.current = null;
     };
   }, [ring]);
 
   useEffect(() => {
-    const layer = sensorLayer.current;
+    const layer = coverageLayer.current;
     if (!layer) return;
     layer.clearLayers();
-    const style = { color: "#7e22ce", weight: 1, dashArray: "4 4", fillOpacity: 0.04 };
     for (const c of coverage) {
-      L.circle([c.lat, c.lon], { ...style, radius: c.range_m })
-        .bindTooltip(c.name)
-        .addTo(layer);
-      // A text tag, not a dot, so a sensor site is never mistaken for a boat.
+      L.circle([c.lat, c.lon], {
+        radius: c.rangeM,
+        color: "#7e22ce",
+        weight: 1,
+        dashArray: "4 4",
+        fillOpacity: 0.06,
+        interactive: false,
+      }).addTo(layer);
+      // A text tag, not a dot, so a radar site is never mistaken for a boat.
       const tag = L.divIcon({
-        className: "rounded bg-purple-800 px-1 text-[10px] leading-4 whitespace-nowrap text-white",
-        html: c.label,
-        iconSize: undefined,
+        className: "",
+        html: `<span class="inline-block -translate-x-1/2 -translate-y-1/2 rounded bg-purple-800 px-1 text-[10px] leading-4 whitespace-nowrap text-white">Radar: ${c.name}</span>`,
+        iconSize: [0, 0],
       });
-      L.marker([c.lat, c.lon], { icon: tag, keyboard: false }).bindTooltip(c.name).addTo(layer);
+      L.marker([c.lat, c.lon], { icon: tag, keyboard: false, interactive: false }).addTo(layer);
     }
   }, [coverage]);
 
@@ -156,26 +133,20 @@ export default function ShipMap({
         markers.current.set(s.id, marker);
       }
       marker.setLatLng([s.lat, s.lon]);
-      const style = markerStyle(s.status, s.id === selectedId);
-      marker.setStyle(style);
-      marker.setRadius(style.radius ?? 5);
-      if (s.status === "unidentified") marker.bringToFront();
+      marker.setStyle({
+        color: STATUS_COLOR[s.status],
+        fillColor: STATUS_COLOR[s.status],
+        radius: s.id === selectedId ? 8 : 5,
+      });
       marker.setTooltipContent(`${s.name} (${s.type}), ${STATUS_WORD[s.status]}`);
       marker.setPopupContent(
-        s.status === "unidentified"
-          ? [
-              `<strong>${s.name}</strong>`,
-              `${s.type[0]?.toUpperCase()}${s.type.slice(1)} (synthetic sensor data)`,
-              `Status: ${STATUS_WORD[s.status]}`,
-              "No AIS id or call sign: radar can't say whose boat it is",
-            ].join("<br>")
-          : [
-              `<strong>${s.name}</strong>`,
-              `${s.type}${s.lengthM ? `, ${s.lengthM} m` : ""}`,
-              `Status: ${STATUS_WORD[s.status]}`,
-              `Call sign: ${s.callsign || "not broadcast"}`,
-              `AIS id: ${s.id}`,
-            ].join("<br>"),
+        [
+          `<strong>${s.name}</strong>`,
+          `${s.type}${s.lengthM ? `, ${s.lengthM} m` : ""}`,
+          `Status: ${STATUS_WORD[s.status]}`,
+          `Call sign: ${s.callsign || "not broadcast"}`,
+          `AIS id: ${s.id}`,
+        ].join("<br>"),
       );
     }
     for (const [id, marker] of markers.current) {

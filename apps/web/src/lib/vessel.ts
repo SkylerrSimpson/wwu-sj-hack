@@ -8,8 +8,7 @@ export type Entry = {
   t: number;
   lon: number;
   lat: number;
-  // unidentified: a radar contact no AIS vessel matches (lib/fusion)
-  status: "suspicious" | "watch" | "unidentified";
+  status: "suspicious" | "watch";
 };
 
 export function vesselStatus(v: Vessel, lists: Lists): Status {

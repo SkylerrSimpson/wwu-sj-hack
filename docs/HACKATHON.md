@@ -1,62 +1,57 @@
-# The weekend
+# The day
 
-WWU Social Justice Hackathon, Fri Nov 6 to Sun Nov 8, 2026, Kaiser Borsari Building. Rules: https://wwu-sj-hack.devpost.com/rules. The agreement we sign at check-in overrides the website.
+WWU Social Justice Hackathon, Sat Nov 7 2026, Kaiser Borsari Building. Rules: https://wwu-sj-hack.devpost.com/rules. The agreement we sign at check-in overrides the website.
 
-Devpost deadline: written here Friday night.
+Event schedule: 9:00 challenges announced and teams form; 10:00 work starts; 11:00 lunch; **16:00 deadline to submit**; 16:05 pitches (CF 110); 18:00 winners.
 
-## How we are scored: 50 points
+## How we are scored: 45 points
 
-Review stage, seven rows, 1 to 5 each (35):
+Review stage, six rows, 1 to 5 each (30):
 
-| Row                          | What a 5 looks like                                           |
-| ---------------------------- | ------------------------------------------------------------- |
-| Innovation & Creativity      | novel use of technology                                       |
-| Impact & Community Relevance | deep understanding of the community's need                    |
-| Design & UX                  | polished, intuitive, accessible                               |
-| Feasibility & Scalability    | the nonprofit could actually run it                           |
-| Technical Execution          | fully functional                                              |
-| Equity & Ethics              | risks named and a concrete safeguard implemented              |
-| Fitness                      | directly addresses the problem statement, then goes beyond it |
+| Row                            | What a 5 looks like                                                                                        |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| Innovation & Creativity        | highly original; novel use of technology                                                                   |
+| Impact & Community Relevance   | deep understanding of community needs                                                                      |
+| Design & User Experience       | polished, intuitive, accessible                                                                            |
+| Feasibility & Scalability      | the Nation could actually run it                                                                           |
+| Technical Execution            | fully functional                                                                                           |
+| Equity & Ethical Consideration | risks named, concrete safeguards implemented, and an environmental impact estimate if AI was used to build |
 
 Presentation stage, three rows, 1 to 5 each (15): Delivery (time limit, recovery, engagement), Content (slides with visible effort), Knowledge (answering questions confidently; judges are told to spot projects "vibe-coded or AI-generated without intent").
 
-Code is 5 of 50. The rest is understanding the problem, the user, the ethics, and the pitch.
+Code is a fraction of the points. The rest is understanding the problem, the user, the ethics, and the pitch. Confirm the rubric at check-in.
 
 ## What we submit
 
-- The live site: the production domain from `SETUP.md`, opened in a private window to confirm it needs no login.
-- The GitHub repo, public by Sunday.
+- The live site, opened in a private window to confirm it needs no login.
+- The GitHub repo, public before submitting.
 - Slides, with the pre-recorded demo embedded or linked.
 - The pitch document, on the organizers' template.
-- Two presenters at most.
+- Two presenters: Skyler (architecture, web) and Willow (data, coverage, ethics).
 
-## Before Friday
+## Schedule
 
-- [ ] Both of us: `SETUP.md` on our laptops and on a lab machine, through to the site running locally.
-- [ ] Read the rules on pre-event code; the check-in agreement overrides them. The scaffold is declared in `README.md`.
-- [ ] Skyler: Vercel, per `SETUP.md`.
-- [ ] Willow: one throwaway issue end to end, so the first real one is not the first time.
+**T** is when coding starts (planned 10:00). **D** is the 16:00 deadline; it never moves. If T slips, squeeze the middle, never the end. At each **gate** everyone stops and walks the live URL together for two minutes.
 
-## Friday night, about two hours once we have the challenge
+| When               | Skyler                                                                                            | Nathan                                                  | Luke                                | Willow                                                  |
+| ------------------ | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------- | ----------------------------------- | ------------------------------------------------------- |
+| T−1:00             | Vercel (import repo, root `apps/web`, branch `main`, Node 24); challenge; rep questions; grilling | Accept invite, plugins, clone, `make setup`, `make dev` | Same                                | Accept invite, `make setup`, rep data questions         |
+| T+0:00             | Land the plan commit; create the issues                                                           | Read AGENTS.md, standards, SPEC                         | Same                                | Open the `schema:` issue                                |
+| T+0:15             | Dependency commit                                                                                 | `visit.ts` test-first                                   | Layout: banner, caveats, provenance | Schema, pass-through `build.py`, sample `data.json`     |
+| T+0:30             | `VisitMap`                                                                                        |                                                         |                                     |                                                         |
+| T+0:45             | `data.ts` within 10 min of Willow's commit                                                        |                                                         | Land layout                         | Land schema and sample                                  |
+| **Gate 1, T+1:00** | **Live site shows sample visits with the banner**                                                 |                                                         |                                     |                                                         |
+| T+1:00             | `VisitMap`                                                                                        | Land `visit.ts` by T+1:30; home page                    | Visit page; map placeholder         | `fetch()`: stream, strip identities, boundary           |
+| T+2:00             | Land `VisitMap`; help Luke wire it                                                                | Home page lands                                         | Visit page lands                    | Visit rules test-first; approved list; synthetic vessel |
+| T+2:30             | Review landings                                                                                   | Accessibility, mobile                                   | Slides and pitch doc                |                                                         |
+| **Gate 2, T+3:00** | **Click-through works live: list → visit → map → record**                                         |                                                         |                                     |                                                         |
+| T+3:00             | Integrate, polish                                                                                 | Help with slides                                        | Slides                              | Real `data.json` lands; `NOTES.md`                      |
+| **Gate 3, D−2:15** | **Real data live, or ship the sample labeled "sample"**                                           |                                                         |                                     |                                                         |
+| **D−2:00**         | **Freeze. Review; bug issues; fixes only**                                                        | Fixes                                                   | Slides                              | Data slide                                              |
+| D−1:30             | README, environmental line, secret scan, repo public, Devpost                                     | Record the 90 s demo                                    | Finish slides and pitch doc         | Rehearse Q&A                                            |
+| **Gate 4, D−0:30** | **Submit**                                                                                        |                                                         |                                     |                                                         |
+| D+0:05             | Pitch                                                                                             |                                                         |                                     | Pitch                                                   |
 
-1. Download the pitch template. Write the Devpost deadline at the top of this file.
-2. Talk to the nonprofit rep. Write down their words, and ask whether we may quote them in a public repo. Willow asks what data they have today, how often it changes, and what in it is private.
-3. Thirty minutes of hard questions, then stop: who is the one user; what do they do today; what is the smallest tool that changes that; what could go wrong for them; what language do they read; what device and connection do they have (a phone on cellular is the default); who is excluded if it is English only.
-4. Fill `SPEC.md`. The demo script plus the safeguards table is the scope; everything else waits.
-5. Agree the record fields. Willow lands the schema, sample rows and regenerated data first; Skyler types the fields on the web side after. From then on neither of us waits on the other.
-6. Write five to eight small issues, each one thing you could watch happen in the demo, with "done when" lines. The owner is the assignee.
-7. Deploy the walking skeleton: real schema, sample data, one page, a real title and description. Then `git tag friday && git push origin friday`.
+If a gate slips: Gate 1, build against hand-written sample visits in tests; Gate 2, cut the map (the record stands alone); Gate 3, cut real data from the app, not from the pitch.
 
-## Saturday
-
-- Work the issues one at a time each. Land on `main` after every one, and walk the demo on the live site after every landing.
-- 3pm: start the slides and the pitch document, and fill `README.md` for a reader who has never seen the project.
-- 5pm: feature freeze. One review of everything since the `friday` tag; each finding becomes a bug issue; then fixes only.
-- Evening: record the demo. Upload it unlisted, paste the link into the slides and the Devpost form, and keep the mp4 and a PDF of the slides on the presenting laptop in case the wifi dies.
-
-## Sunday
-
-- Polish the demo path.
-- Q&A drill: each of us explains the other's half. Expect to be asked where the data came from and how we know it is right.
-- Make the repo public once `git grep -iE 'password|secret|token|api[_-]?key' -- . ':!pnpm-lock.yaml' ':!data/uv.lock'` prints nothing.
-- Submit all four items before the deadline.
+Before the repo goes public: `git grep -iE 'password|secret|token|api[_-]?key' -- . ':!pnpm-lock.yaml' ':!data/uv.lock'` prints nothing.

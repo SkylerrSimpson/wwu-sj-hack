@@ -11,6 +11,8 @@ export const DEFAULT_CONFIG: Config = {
   patterns: [
     { text: "XWL", label: "Lummi Nation", field: "callsign" },
     { text: "WSF", label: "Washington State Ferries", field: "name" },
+    { text: "WDJ7956", label: "Whatcom County ferry", field: "callsign" },
+    { text: "LENGESOT", label: "Law enforcement, listed", field: "name" },
     { text: "HOH", label: "Hoh Tribe", field: "callsign" },
     { text: "JST", label: "Jamestown S'Klallam Tribe", field: "callsign" },
     { text: "KWA", label: "Quinault Nation", field: "callsign" },

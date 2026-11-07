@@ -120,17 +120,16 @@ test("serializeConfig writes JSON with arrays that parseConfig reads back", () =
   expect(parseConfig(serializeConfig(DEFAULT_CONFIG))).toEqual(DEFAULT_CONFIG);
 });
 
-test("DEFAULT_CONFIG approves the four WSF ferries in the recording and nothing else by pattern", () => {
+test("DEFAULT_CONFIG approves the four WSF ferries and the two listed public boats in the recording, nothing else", () => {
   const matched = data.vessels.filter((v) => matchedPattern(v, DEFAULT_CONFIG.patterns));
-  expect(matched.map((v) => v.name).sort()).toEqual([
-    "WSF CHELAN",
-    "WSF KALEETAN",
-    "WSF TILLIKUM",
-    "WSF YAKIMA",
+  expect(matched.map((v) => `${v.name}: ${labelOf(v, DEFAULT_CONFIG)}`).sort()).toEqual([
+    "LENGESOT: Law enforcement, listed",
+    "WHATCOM CHIEF: Whatcom County ferry",
+    "WSF CHELAN: Washington State Ferries",
+    "WSF KALEETAN: Washington State Ferries",
+    "WSF TILLIKUM: Washington State Ferries",
+    "WSF YAKIMA: Washington State Ferries",
   ]);
-  expect(matched.map((v) => labelOf(v, DEFAULT_CONFIG))).toEqual(
-    Array<string>(4).fill("Washington State Ferries"),
-  );
   expect(DEFAULT_CONFIG.priority.size).toBe(0);
   expect(DEFAULT_CONFIG.watch.size).toBe(0);
 });
@@ -159,4 +158,13 @@ test("moveTo puts a vessel on one list, takes it off the other, and null clears 
   expect([...watched.watch]).toEqual(["b", "a"]);
   expect([...moveTo(watched, null, "a").watch]).toEqual(["b"]);
   expect([...start.priority]).toEqual(["a"]);
+});
+
+test("the two listed public boats are approved by default in every mode, not only in the recorded data", () => {
+  expect(matchedPattern(vessel("WHATCOM CHIEF", "WDJ7956"), DEFAULT_CONFIG.patterns)?.label).toBe(
+    "Whatcom County ferry",
+  );
+  expect(matchedPattern(vessel("LENGESOT"), DEFAULT_CONFIG.patterns)?.label).toBe(
+    "Law enforcement, listed",
+  );
 });

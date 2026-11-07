@@ -1,13 +1,16 @@
 import { expect, test } from "vitest";
 import { data, type Vessel } from "@/lib/data";
 import {
+  appendEntries,
   inLummiWaters,
   isInside,
+  liveWindow,
   newEntries,
   shownStatus,
   positionAt,
   summary,
   vesselStatus,
+  type Entry,
   type Lists,
 } from "./vessel";
 
@@ -224,4 +227,34 @@ test("inLummiWaters and summary show a crossed vessel as suspicious, after the w
   const lists: Lists = { priority: new Set(), watch: new Set(["w"]) };
   const rows = summary(inLummiWaters([a, w], square, 10000, lists, new Set(["a"])), (v) => v.type);
   expect(rows.map((r) => r.status)).toEqual(["watch", "suspicious"]);
+});
+
+test("liveWindow ends at the newest fix across vessels and reaches back the given seconds", () => {
+  const a = vessel("a", [
+    [100, 2, 2],
+    [900, 0.5, 0.5],
+  ]);
+  const b = vessel("b", [[1200, 2, 2]]);
+  expect(liveWindow([a, b], 600)).toEqual([600, 1200]);
+  expect(liveWindow([], 600)).toEqual([-600, 0]);
+});
+
+test("appendEntries adds new entries in order and drops one already logged for the same vessel and time", () => {
+  const entry = (vesselId: string, t: number): Entry => ({
+    vesselId,
+    name: `Boat ${vesselId}`,
+    t,
+    lon: 0.5,
+    lat: 0.5,
+    status: "suspicious",
+  });
+  const logged = [entry("a", 200), entry("b", 300)];
+  const found = [entry("a", 200), entry("a", 400), entry("b", 300), entry("c", 350)];
+  expect(appendEntries(logged, found)).toEqual([
+    entry("a", 200),
+    entry("b", 300),
+    entry("a", 400),
+    entry("c", 350),
+  ]);
+  expect(appendEntries(logged, [])).toBe(logged);
 });

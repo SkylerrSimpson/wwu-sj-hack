@@ -14,7 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { moveTo, type Config, type PatternField } from "@/lib/config";
+import { isOneWord, moveTo, type Config, type PatternField } from "@/lib/config";
 
 type Named = { id: string; name: string };
 type ListKey = "priority" | "watch";
@@ -52,8 +52,8 @@ export default function ConfigPanel({
     e.preventDefault();
     const t = text.trim();
     if (!t) return setPatternError("Type the text to match before adding.");
-    if (/\s/.test(t))
-      return setPatternError("A pattern is one word; names are matched word by word.");
+    if (!isOneWord(t))
+      return setPatternError("A pattern is one word: no spaces, hyphens or slashes.");
     if (config.patterns.some((p) => p.text.toLowerCase() === t.toLowerCase()))
       return setPatternError(`"${t}" is already a pattern.`);
     const next = copy();

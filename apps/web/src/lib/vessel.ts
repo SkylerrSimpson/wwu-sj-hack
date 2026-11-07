@@ -74,6 +74,21 @@ export function newEntries(
   return entries.sort((a, b) => a.t - b.t);
 }
 
+// Scrubbing back and playing again, or a live window that overlaps the last one, finds the same
+// crossings twice; the alert log keeps each vessel's crossing once.
+export function appendEntries(existing: Entry[], found: Entry[]): Entry[] {
+  const seen = new Set(existing.map((e) => `${e.vesselId}:${e.t}`));
+  const fresh = found.filter((e) => !seen.has(`${e.vesselId}:${e.t}`));
+  return fresh.length ? [...existing, ...fresh] : existing;
+}
+
+// Live fixes carry the AIS message time, so the window hangs off the newest fix, not the clock
+// of the phone showing it: a slow feed or a fast clock would otherwise hide every crossing.
+export function liveWindow(vessels: Vessel[], seconds: number): [from: number, to: number] {
+  const newest = Math.max(0, ...vessels.map((v) => v.track.at(-1)?.[0] ?? 0));
+  return [newest - seconds, newest];
+}
+
 export type InWater = { vessel: Vessel; status: Status; lon: number; lat: number };
 
 export function inLummiWaters(

@@ -31,7 +31,10 @@ export const DEFAULT_CONFIG: Config = {
   watch: new Set(),
 };
 
-const wordsOf = (s: string) => new Set(s.toLowerCase().split(/[\s/-]+/));
+const WORD_BREAK = /[\s/-]/;
+const wordsOf = (s: string) => new Set(s.toLowerCase().split(WORD_BREAK));
+// A pattern holding a word break can never equal a whole word, so Settings refuses it.
+export const isOneWord = (s: string) => !WORD_BREAK.test(s);
 
 // Whole words of one field, not substrings: CG must not approve CMA CGM, and a call-sign code
 // must not approve a name that happens to contain it.
@@ -87,12 +90,15 @@ export function parseConfig(text: string): Config | null {
   if (!patterns.every(isPattern) || !priority.every(isString) || !watch.every(isString))
     return null;
   return {
-    // Configurations saved before patterns had a field matched names.
-    patterns: patterns.map(({ text, label, field }) => ({
-      text,
-      label,
-      field: field === "callsign" ? "callsign" : "name",
-    })),
+    // A list saved before patterns had a field holds the tribal codes as name matches, which
+    // approves the wrong boats, so the defaults replace it; the lists are kept.
+    patterns: patterns.every((p) => "field" in p)
+      ? patterns.map(({ text, label, field }) => ({
+          text,
+          label,
+          field: field === "callsign" ? "callsign" : "name",
+        }))
+      : DEFAULT_CONFIG.patterns,
     priority: new Set(priority),
     watch: new Set(watch),
   };

@@ -2,6 +2,7 @@ import { expect, test } from "vitest";
 import { data, type Vessel } from "@/lib/data";
 import {
   DEFAULT_CONFIG,
+  isOneWord,
   labelOf,
   listsFor,
   matchedPattern,
@@ -42,6 +43,13 @@ test("matchedPattern matches whole words only, split on spaces, hyphens and slas
   expect(matchedPattern(vessel("CMA CGM MARCO POLO"), [cg])).toBeNull();
   expect(matchedPattern(vessel("WSF-CHELAN/2"), [wsf])).toEqual(wsf);
   expect(matchedPattern(vessel("Patrol one", "xwl123"), [xwl])).toBeNull();
+});
+
+test("isOneWord refuses the characters that split a name into words, so a pattern can always match", () => {
+  expect(isOneWord("WSF")).toBe(true);
+  expect(isOneWord("WSF-1")).toBe(false);
+  expect(isOneWord("CG/2")).toBe(false);
+  expect(isOneWord("Coast Guard")).toBe(false);
 });
 
 test("matchedPattern takes the first pattern in order and skips empty text", () => {
@@ -88,6 +96,16 @@ test("parseConfig reads arrays into Sets and a pattern list", () => {
     '{"patterns":[{"text":"WSF","label":"Washington State Ferries","field":"name"}],"priority":["a"],"watch":["b"]}';
   expect(parseConfig(text)).toEqual({
     patterns: [wsf],
+    priority: new Set(["a"]),
+    watch: new Set(["b"]),
+  });
+});
+
+test("parseConfig swaps a pattern list saved before patterns had a field for the defaults, keeping the lists", () => {
+  const stale =
+    '{"patterns":[{"text":"XWL","label":"Lummi Nation"},{"text":"WSF","label":"Washington State Ferries","field":"name"}],"priority":["a"],"watch":["b"]}';
+  expect(parseConfig(stale)).toEqual({
+    patterns: DEFAULT_CONFIG.patterns,
     priority: new Set(["a"]),
     watch: new Set(["b"]),
   });

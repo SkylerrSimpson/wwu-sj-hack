@@ -43,7 +43,9 @@ import {
 import { PANEL_DEFAULT } from "@/lib/panel";
 import { STATUS_WORD, type ShipStatus } from "@/lib/status";
 import {
+  appendEntries,
   inLummiWaters,
+  liveWindow,
   newEntries,
   positionAt,
   summary,
@@ -247,7 +249,7 @@ function ReplayView({ data }: { data: Data }) {
 
   // A chosen end shows the whole window at once; otherwise charts follow the clock, recomputed
   // once per interval, not per tick.
-  const box = useMemo(() => extent(data.vessels), [data.vessels]);
+  const box = useMemo(() => extent(vessels), [vessels]);
   const heatRows = Math.max(
     1,
     Math.round(
@@ -257,8 +259,9 @@ function ReplayView({ data }: { data: Data }) {
   );
   const firstFix =
     mode === "live" ? Math.min(at, ...liveVessels.map((v) => v.track[0]?.[0] ?? at)) : start;
+  const lastFix = mode === "live" ? at : end;
   const plotFrom = filter.start ?? firstFix;
-  const plotTo = Math.max(plotFrom, filter.end ?? (mode === "live" ? at : end));
+  const plotTo = Math.max(plotFrom, filter.end ?? lastFix);
   const step = stepFor(plotTo - plotFrom);
   const cut =
     filter.end !== null
@@ -299,17 +302,13 @@ function ReplayView({ data }: { data: Data }) {
     prev.current[mode] = at;
     if (at <= from) return;
     // Live fixes arrive seconds after they were heard, so the live window reaches back ten
-    // minutes and forward without limit; the seen set below drops repeats.
+    // minutes from the newest fix; appendEntries drops the repeats.
     const found =
       mode === "live"
-        ? newEntries(vessels, data.boundary.ring, at - 600, Infinity, lists)
+        ? newEntries(vessels, data.boundary.ring, ...liveWindow(vessels, 600), lists)
         : newEntries(vessels, data.boundary.ring, from, at, lists);
     if (!found.length) return;
-    // Scrubbing back and playing again crosses the same fixes; the alert log must not repeat them.
-    setEntries((e) => {
-      const seen = new Set(e.map((x) => `${x.vesselId}:${x.t}`));
-      return [...e, ...found.filter((x) => !seen.has(`${x.vesselId}:${x.t}`))];
-    });
+    setEntries((e) => appendEntries(e, found));
   }, [at, mode, vessels, data.boundary.ring, lists]);
 
   const suspicious = useMemo(
@@ -609,7 +608,7 @@ function ReplayView({ data }: { data: Data }) {
             <X />
           </Button>
         </div>
-        <FilterPanel filter={filter} onFilter={setFilter} start={start} end={end} />
+        <FilterPanel filter={filter} onFilter={setFilter} start={firstFix} end={lastFix} />
         {plots && (
           <Plots
             summary={plotSummary}

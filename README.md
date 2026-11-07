@@ -1,6 +1,8 @@
-# Project name
+# Lummi Vessel Tracker
 
-One sentence: who it helps and how. Filled Saturday.
+Helps Lummi Nation staff see which vessels are in Lummi waters and get an email when one that is not on the approved list enters. Built in one day at the WWU Social Justice Hackathon, Nov 7 2026, from five recorded days of public AIS ship positions.
+
+How it works, in one breath: public ship positions, then rules that find which vessels are inside the reservation boundary and which just crossed in, then a map that replays the days with an alert panel. The approved list and the patterns that mark known vessels (XWL, WSF, SWN, NKK) are edited in the app. The only alerting vessel in the demo is a labeled synthetic one; no real boat is accused.
 
 Live: https://example.vercel.app
 
@@ -9,6 +11,8 @@ Live: https://example.vercel.app
     pnpm install && pnpm dev      # http://localhost:3000; needs Node 24 and pnpm
 
 Node 24: https://nodejs.org. pnpm: `npm i -g pnpm` or https://pnpm.io/installation.
+
+Email alerts need a free [Resend](https://resend.com) key in `apps/web/.env.local` as `RESEND_API_KEY=...`; the test sender only delivers to the Resend account owner's inbox.
 
 The data the app reads is committed at `apps/web/public/data.json`. Regenerating it needs [uv](https://docs.astral.sh/uv/), which fetches Python itself: `cd data && uv sync && uv run build.py`.
 
@@ -20,4 +24,4 @@ The data the app reads is committed at `apps/web/public/data.json`. Regenerating
 
 ## How it was built
 
-`docs/SPEC.md` is the problem and scope, `docs/DECISIONS.md` the choices and why, `docs/HACKATHON.md` the plan. The scaffold (tooling, an empty page, two sample rows) was set up on Nov 4, before the event; everything the user sees was built Nov 6 to 8, and the commit history shows the line. Skyler Simpson built `apps/web/`, Willow Hughes built `data/`.
+`docs/SPEC.md` is the problem and scope, `docs/DECISIONS.md` the choices and why, `docs/HACKATHON.md` the plan. The scaffold (tooling, an empty page, two sample rows) was set up on Nov 4, before the event; everything the user sees was built on Nov 7, and the commit history shows the line. Skyler Simpson, Nathan, Luke and Willow Hughes, with Claude Code as a pair programmer; the app itself runs no AI.

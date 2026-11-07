@@ -19,7 +19,7 @@ Ninety seconds, pre-recorded.
 1. A Lummi Nation staff member opens Lummi Vessel Tracker: a map of Lummi waters with the reservation boundary outlined and every ship as a dot, from five recorded days of AIS (Dec 5 to 9 2024), coloured by status with the status in the hover text. Beside it, "In Lummi waters now": one row per kind of vessel, for example "Whatcom County ferry: 1", "Law enforcement, listed: 1", "Pleasure craft: 2". A banner says "Approved list invented for this demo; no vessel shown is suspected of anything."
 2. They press play. The clock runs in Pacific time, the dots move, the table updates.
 3. A labeled synthetic vessel, on neither list, crosses into Lummi waters: its dot turns suspicious, the alert log shows it, and an email arrives at the user's saved address: "A vessel not on the approved list entered Lummi waters: Demo vessel (synthetic), Thu Dec 5, 5:30 AM PST, 48.77 N 122.70 W. Self-reported AIS: corroborate before acting."
-4. The user clicks the dot and adds it to the watch list. The vessel leaves and crosses in again an hour later: "A vessel on your watch list entered Lummi waters: ...".
+4. The user clicks the dot and adds it to the watch list. The vessel leaves and crosses in again an hour later, at 6:30 AM PST: "A vessel on your watch list entered Lummi waters: ...".
 5. On screen throughout: each data source with its date, "Approximate boundary, not a legal boundary", and "Most fishing and recreational boats under 65 ft don't carry AIS; no alert does not mean no unapproved boat was there."
 
 ## Out of scope

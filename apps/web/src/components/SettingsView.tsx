@@ -22,12 +22,14 @@ export default function SettingsView({ vessels }: { vessels: { id: string; name:
         Approved list invented for this demo; no vessel shown is suspected of anything.
       </p>
       <main className="mx-auto w-full max-w-3xl flex-1 space-y-4 p-4 animate-in fade-in slide-in-from-bottom-1 duration-300 motion-reduce:animate-none">
-        <header className="flex items-start justify-between gap-4">
+        <header className="flex items-center justify-between gap-4">
           <h1 className="text-2xl font-semibold">Settings</h1>
-          <Button variant="outline" render={<Link href="/map" />}>
-            Back to map
-          </Button>
-          <SignOutButton />
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" render={<Link href="/map" />}>
+              Back to map
+            </Button>
+            <SignOutButton />
+          </div>
         </header>
 
         <Card size="sm">

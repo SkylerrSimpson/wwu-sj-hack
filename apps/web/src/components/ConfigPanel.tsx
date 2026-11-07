@@ -186,10 +186,7 @@ export default function ConfigPanel({
 
       <Card size="sm">
         <CardHeader>
-          <CardTitle>Approved vessels</CardTitle>
-          <CardAction>
-            <Badge variant="secondary">{config.priority.size}</Badge>
-          </CardAction>
+          <CardTitle>Add a vessel</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="space-y-1">
@@ -258,15 +255,24 @@ export default function ConfigPanel({
               </Button>
             </div>
           </div>
-          {idTable("priority", "No vessels added yet.")}
         </CardContent>
+      </Card>
+
+      <Card size="sm">
+        <CardHeader>
+          <CardTitle>Approved vessels</CardTitle>
+          <CardAction>
+            <Badge variant="secondary">{config.priority.size}</Badge>
+          </CardAction>
+        </CardHeader>
+        <CardContent>{idTable("priority", "No vessels added yet.")}</CardContent>
       </Card>
 
       <Card size="sm">
         <CardHeader>
           <CardTitle>Watch list</CardTitle>
           <CardAction>
-            <Badge variant="destructive">{config.watch.size}</Badge>
+            <Badge variant="secondary">{config.watch.size}</Badge>
           </CardAction>
         </CardHeader>
         <CardContent className="space-y-3">

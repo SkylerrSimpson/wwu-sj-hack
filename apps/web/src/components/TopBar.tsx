@@ -1,6 +1,7 @@
 "use client";
 
-import { Eye, EyeOff, Moon, Pause, Play, Settings, Sun } from "lucide-react";
+import { useEffect, useRef } from "react";
+import { Eye, EyeOff, Moon, Pause, Play, SlidersHorizontal, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -57,6 +58,18 @@ function ThemeToggle() {
 }
 
 export default function TopBar(p: TopBarProps) {
+  const header = useRef<HTMLElement>(null);
+  // The bar wraps onto more lines on a narrow screen; the column and drawer start below it.
+  useEffect(() => {
+    const el = header.current;
+    if (!el) return;
+    const set = () =>
+      document.documentElement.style.setProperty("--chrome-h", `${el.offsetHeight}px`);
+    set();
+    const ro = new ResizeObserver(set);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [p.overlayShown]);
   if (!p.overlayShown)
     return (
       <>
@@ -78,9 +91,10 @@ export default function TopBar(p: TopBarProps) {
   const replay = p.mode === "replay";
   return (
     <header
+      ref={header}
       className={`fixed inset-x-0 top-0 ${Z} animate-in fade-in slide-in-from-top-2 duration-200 motion-reduce:animate-none`}
     >
-      <div className="flex h-12 items-center gap-3 border-b bg-background px-3">
+      <div className="flex min-h-12 flex-wrap items-center gap-x-3 gap-y-2 border-b bg-background px-3 py-2">
         <Tooltip>
           <TooltipTrigger
             render={
@@ -93,7 +107,7 @@ export default function TopBar(p: TopBarProps) {
               />
             }
           >
-            <Settings />
+            <SlidersHorizontal />
           </TooltipTrigger>
           <TooltipContent side="bottom">Filters and charts</TooltipContent>
         </Tooltip>
@@ -102,7 +116,8 @@ export default function TopBar(p: TopBarProps) {
           <span className="hidden text-muted-foreground md:inline">Lummi Vessel Tracker</span>
         </span>
 
-        <div className="flex min-w-0 flex-1 items-center gap-2">
+        {/* Below xl, the playback controls drop to their own row under the logo and switches. */}
+        <div className="order-last flex min-w-0 flex-1 basis-full flex-wrap items-center gap-2 xl:order-none xl:basis-0">
           <div role="group" aria-label="Mode" className="flex gap-1">
             <Button
               size="sm"
@@ -185,7 +200,7 @@ export default function TopBar(p: TopBarProps) {
           <span className="font-mono text-sm tabular-nums whitespace-nowrap">{p.clockText}</span>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="ml-auto flex items-center gap-3">
           <Switch id="paths" size="sm" checked={p.showPaths} onCheckedChange={p.onShowPaths} />
           <Label htmlFor="paths">Paths</Label>
           <Switch id="radar" size="sm" checked={p.showRadar} onCheckedChange={p.onShowRadar} />

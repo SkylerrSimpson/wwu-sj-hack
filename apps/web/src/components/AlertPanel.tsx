@@ -1,12 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { startTransition, useEffect, useRef, useState } from "react";
 import { useAlertEmail } from "@/components/useAlertEmail";
 import { sendAlert } from "@/app/actions";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import type { Entry } from "@/lib/vessel";
 
 type Attempt = { key: string; entry: Entry; result: string };
@@ -18,7 +16,8 @@ const pacific = new Intl.DateTimeFormat("en-US", {
 });
 
 export default function AlertPanel({ entries }: { entries: Entry[] }) {
-  const [email, setEmail] = useAlertEmail();
+  // Set in Settings; this tab only reads it.
+  const [email] = useAlertEmail();
   const [log, setLog] = useState<Attempt[]>([]);
   const seen = useRef(new Set<string>());
 
@@ -48,37 +47,33 @@ export default function AlertPanel({ entries }: { entries: Entry[] }) {
   }, [entries, email]);
 
   return (
-    <Card className="text-sm">
-      <CardHeader>
-        <CardTitle>Alerts</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <Label htmlFor="alert-email">Email for alerts</Label>
-        <div className="mt-1 flex gap-2">
-          <Input
-            id="alert-email"
-            type="email"
-            autoComplete="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-          <Button
-            variant="outline"
-            onClick={() =>
-              send(`test:${Date.now()}`, {
-                vesselId: "demo",
-                name: "Demo vessel (synthetic)",
-                t: Math.floor(Date.now() / 1000),
-                lon: -122.7,
-                lat: 48.77,
-                status: "suspicious",
-              })
-            }
-          >
-            Send test alert
-          </Button>
-        </div>
-        <ol className="mt-2 list-decimal pl-5">
+    <div className="space-y-3 text-sm">
+      <p className="text-muted-foreground">
+        {email ? `Alerts go to ${email}.` : "No alert email set."}{" "}
+        <Link href="/settings" className="underline">
+          {email ? "Change" : "Set one"} in Settings
+        </Link>
+      </p>
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={() =>
+          send(`test:${Date.now()}`, {
+            vesselId: "demo",
+            name: "Demo vessel (synthetic)",
+            t: Math.floor(Date.now() / 1000),
+            lon: -122.7,
+            lat: 48.77,
+            status: "suspicious",
+          })
+        }
+      >
+        Send test alert
+      </Button>
+      {log.length === 0 ? (
+        <p className="text-muted-foreground">No alerts yet.</p>
+      ) : (
+        <ol className="list-decimal pl-5">
           {log.map((a) => (
             <li
               key={a.key}
@@ -89,7 +84,7 @@ export default function AlertPanel({ entries }: { entries: Entry[] }) {
             </li>
           ))}
         </ol>
-      </CardContent>
-    </Card>
+      )}
+    </div>
   );
 }

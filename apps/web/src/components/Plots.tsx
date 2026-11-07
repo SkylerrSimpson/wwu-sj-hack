@@ -48,7 +48,7 @@ export default function Plots(p: PlotsProps) {
       <Card size="sm">
         <CardHeader>
           <CardTitle>Vessels by type</CardTitle>
-          <CardDescription>Each vessel seen in the window, once</CardDescription>
+          <CardDescription>Each vessel counted once</CardDescription>
         </CardHeader>
         <CardContent>
           <PieChart pie={p.pie} />
@@ -56,7 +56,7 @@ export default function Plots(p: PlotsProps) {
       </Card>
       <Card size="sm">
         <CardHeader>
-          <CardTitle>Where they spend time</CardTitle>
+          <CardTitle>Positions by area</CardTitle>
           <CardDescription>
             Darker cells hold more 5-minute positions. Red outline: Lummi waters.
           </CardDescription>
@@ -218,7 +218,7 @@ function Heatmap({ heat, box, ring }: { heat: Heat; box: Box; ring: number[][] }
         points={ring.map(([lon = 0, lat = 0]) => `${x(lon)},${y(lat)}`).join(" ")}
       />
       <text x={W - 2} y={H - 2} textAnchor="end" className="fill-muted-foreground text-[7px]">
-        � OpenStreetMap
+        &copy; OpenStreetMap
       </text>
     </svg>
   );

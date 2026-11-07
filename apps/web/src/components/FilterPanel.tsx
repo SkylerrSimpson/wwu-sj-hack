@@ -68,8 +68,8 @@ export default function FilterPanel({ filter, onFilter, start, end }: FilterPane
       </fieldset>
       <fieldset className="grid grid-cols-2 gap-2">
         <legend className="mb-1.5 font-medium">Time (Pacific)</legend>
-        {timeSelect("start", "From", "First fix")}
-        {timeSelect("end", "To", "The clock")}
+        {timeSelect("start", "From", "Start of recording")}
+        {timeSelect("end", "To", "Replay time")}
       </fieldset>
     </div>
   );

@@ -60,7 +60,7 @@ const STREAMER = process.env.NEXT_PUBLIC_STREAMER_URL ?? "http://127.0.0.1:8787"
 const HEAT_COLS = 48;
 const BANNER = "Approved list invented for this demo; no vessel shown is suspected of anything.";
 const CAVEAT =
-  "Most small boats carry no AIS, so no alert does not mean no boat. Approximate boundary, not a legal boundary.";
+  "Most small boats carry no AIS, so a boat can be in Lummi waters without an alert. Approximate boundary, not a legal boundary.";
 
 type Mode = "replay" | "live";
 type Feed = { status: string; last_message_age_s: number | null };
@@ -76,7 +76,7 @@ const clock = new Intl.DateTimeFormat("en-US", {
   minute: "2-digit",
   timeZoneName: "short",
 });
-// The recording's window is whole UTC days, so its dates read in UTC.
+// Retrieval dates are calendar dates, so they read in UTC.
 const dayUtc = new Intl.DateTimeFormat("en-US", {
   timeZone: "UTC",
   month: "short",
@@ -85,6 +85,16 @@ const dayUtc = new Intl.DateTimeFormat("en-US", {
 });
 // "2026-11-07" to "Nov 7, 2026"
 const dayLong = (iso: string) => dayUtc.format(Date.parse(`${iso}T00:00:00Z`));
+// The recording's first and last days in Pacific time, to agree with the clock.
+const dayPacific = new Intl.DateTimeFormat("en-US", {
+  timeZone: "America/Los_Angeles",
+  month: "short",
+  day: "numeric",
+});
+const yearPacific = new Intl.DateTimeFormat("en-US", {
+  timeZone: "America/Los_Angeles",
+  year: "numeric",
+});
 
 // The shape of the screen, pulsing, while the 4 MB of tracks download.
 function LoadingScreen() {
@@ -354,8 +364,8 @@ function ReplayView({ data }: { data: Data }) {
     <div className="space-y-3 text-sm">
       <p className="text-xs text-muted-foreground">
         {mode === "live"
-          ? "Live AIS from AISStream through the streamer. Only vessels transmitting AIS and heard by this feed appear; a vessel can be there without being heard."
-          : `Recorded AIS, ${dayUtc.format(Date.parse(data.window.start))} to ${dayUtc.format(Date.parse(data.window.end))}.`}{" "}
+          ? "Live AIS from AISStream. Only vessels transmitting AIS and heard by this feed appear; a vessel can be there without being heard."
+          : `Recorded AIS, ${dayPacific.format(start * 1000)} to ${dayPacific.format(end * 1000)}, ${yearPacific.format(end * 1000)} (Pacific).`}{" "}
         {ships.length} vessels on the map, {inWater} in Lummi waters.
       </p>
       <Table>
@@ -562,7 +572,7 @@ function ReplayView({ data }: { data: Data }) {
         banner={BANNER}
       />
       <SidePanel
-        className={`absolute top-[76px] bottom-0 left-0 z-20${overlay ? "" : " hidden"}`}
+        className={`absolute top-[var(--chrome-h,76px)] bottom-0 left-0 z-20${overlay ? "" : " hidden"}`}
         panes={{ water, lists: listsPane, alerts: <AlertPanel entries={entries} />, vessel }}
         counts={{ water: inWater, alerts: entries.length }}
         collapsed={collapsed}
@@ -575,7 +585,7 @@ function ReplayView({ data }: { data: Data }) {
         aria-label="Filters and charts"
         // At least 384 px so the pie legend stays on one line.
         style={{ width: Math.max(panelWidth, 384) }}
-        className={`absolute top-[76px] bottom-0 left-0 z-30 space-y-4 overflow-y-auto border-r bg-background p-3 shadow-xl transition-all duration-300 ease-out motion-reduce:transition-none ${menuOpen ? "" : "invisible -translate-x-full"}${overlay ? "" : " hidden"}`}
+        className={`absolute top-[var(--chrome-h,76px)] bottom-0 left-0 z-30 space-y-4 overflow-y-auto border-r bg-background p-3 shadow-xl transition-all duration-300 ease-out motion-reduce:transition-none ${menuOpen ? "" : "invisible -translate-x-full"}${overlay ? "" : " hidden"}`}
       >
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold">Filters and charts</h2>

@@ -1,5 +1,7 @@
 # Prep notes
 
+**Superseded in part.** At kickoff the team chose its own plan, Lummi Vessel Tracker (`docs/SPEC.md`). The data facts and the research here still hold; the visit-list design, the issue numbers and the delegation do not.
+
 Research and planning from the morning of Sat Nov 7 2026, written outside the repo and copied in when the event started. Where these notes mention "the prep folder", `research/`, `t0-commit/` or `../`, they mean this folder or the repo files the plan became.
 
 The binding versions are `AGENTS.md`, `docs/SPEC.md`, `docs/DECISIONS.md` and `docs/HACKATHON.md`. When a note here disagrees with them, they win.

@@ -1,13 +1,13 @@
 # WWU Social Justice Hackathon
 
-A prototype for the Lummi Nation, built in one day: Saturday Nov 7 2026, four people, 10:00 to a 16:00 deadline, pitched at 16:05. Build what the demo script in `docs/SPEC.md` shows, with the safeguards it lists, and nothing beyond that. Small and clean beats complete: one module per concept and one data contract are what let it grow if the Nation wants more, and six hours is all it gets now. Optimize for a demo that works, a user who is helped, and decisions we can explain to judges who don't code.
+Lummi Vessel Tracker, a prototype for the Lummi Nation, built in one day: Saturday Nov 7 2026, four people, 10:00 to a 16:00 deadline, pitched at 16:05. Build what the demo script in `docs/SPEC.md` shows, with the safeguards it lists, and nothing beyond that. Small and clean beats complete: one module per concept and one data contract are what let it grow if the Nation wants more, and six hours is all it gets now. Optimize for a demo that works, a user who is helped, and decisions we can explain to judges who don't code.
 
 ## Read first
 
 - `docs/SPEC.md`: the problem, the one user, the demo script, the safeguards. The demo script plus the safeguards table is the scope; everything else waits.
 - `docs/DECISIONS.md`: one line per decision made so far.
 - `docs/HACKATHON.md`: the day's schedule and gates.
-- `docs/prep/`: the morning's research (data sources, the AIS check, the audit, talking points).
+- `docs/prep/`: the morning's research. It predates the team's plan; where it disagrees with `docs/SPEC.md`, the spec wins.
 - Standards, binding on every code change: @agents/standards.md
 - Skills and the procedure to follow without them: @agents/skills.md
 
@@ -15,20 +15,18 @@ A prototype for the Lummi Nation, built in one day: Saturday Nov 7 2026, four pe
 
 Every file has one owner, and only the owner commits it. Work inside your own files; `git add` them by name, never `git add -A`.
 
-| File(s)                                                       | Owner  | Notes                                                                          |
-| ------------------------------------------------------------- | ------ | ------------------------------------------------------------------------------ |
-| `data/**`, `apps/web/public/data.json`                        | Willow | `data/AGENTS.md` applies; `build.py` is the only writer of `data.json`         |
-| `docs/SPEC.md`, `AGENTS.md`, `README.md`, `docs/HACKATHON.md` | Skyler | Others suggest, Skyler edits                                                   |
-| `apps/web/package.json`, `pnpm-lock.yaml`, `components/ui/**` | Skyler | Dependencies land in one commit; ask Skyler for another                        |
-| `apps/web/src/lib/data.ts`, `data.test.ts`                    | Skyler | Mirrors `data/schema.json`                                                     |
-| `apps/web/src/components/VisitMap.tsx`                        | Skyler | The only client component; takes `ring`, `track`, `label` as props             |
-| `apps/web/src/lib/visit.ts`, `visit.test.ts`                  | Nathan | Core logic, test-first                                                         |
-| `apps/web/src/app/page.tsx`                                   | Nathan | Summary, flagged visit cards, one line per approved vessel                     |
-| `apps/web/src/app/layout.tsx`                                 | Luke   | Banner, caveats, provenance footer, metadata                                   |
-| `apps/web/src/app/visits/[id]/page.tsx`                       | Luke   | Static per visit; the referral record; renders `<VisitMap>` for flagged visits |
-| `docs/DECISIONS.md`                                           | anyone | Append only; a conflict keeps both sides' lines                                |
+| File(s)                                                                                          | Owner  | Notes                                                                  |
+| ------------------------------------------------------------------------------------------------ | ------ | ---------------------------------------------------------------------- |
+| `data/**`, `apps/web/public/data.json`                                                           | Willow | `data/AGENTS.md` applies; `build.py` is the only writer of `data.json` |
+| `docs/SPEC.md`, `AGENTS.md`, `README.md`, `docs/HACKATHON.md`                                    | Skyler | Others suggest, Skyler edits                                           |
+| `apps/web/package.json`, `pnpm-lock.yaml`, `components/ui/**`                                    | Skyler | Dependencies land in one commit; ask Skyler for another                |
+| `apps/web/src/lib/data.ts`, `data.test.ts`                                                       | Skyler | Types mirroring `data/schema.json`                                     |
+| `apps/web/src/app/page.tsx`, `app/layout.tsx`, `components/Replay.tsx`, `components/ShipMap.tsx` | Skyler | The map, the replay clock, the banner, caveats and sources             |
+| `apps/web/src/lib/vessel.ts`, `vessel.test.ts`                                                   | Nathan | Core logic, test-first: `positionAt`, `isInside`, `newEntries`         |
+| `apps/web/src/app/actions.ts`, `components/AlertPanel.tsx`                                       | Luke   | The email alert, end to end                                            |
+| `docs/DECISIONS.md`                                                                              | anyone | Append only; a conflict keeps both sides' lines                        |
 
-`data/schema.json` is the contract between the data side and the web side; `make check` enforces it. Pages import `@/lib/data`; components receive props and never import it.
+`data/schema.json` is the contract between the data side and the web side; `make check` enforces it. Only `page.tsx` imports `@/lib/data`; every component receives props. The interfaces between owners are in `docs/SPEC.md` › Shape.
 
 A data-format change is agreed out loud between Willow and Skyler, then lands in two steps, each `make check` green: for an added field, the data side first (`schema.json`, `build.py` and its test, the regenerated `data.json`), then `data.ts`; for a removed field, `data.ts` first.
 

@@ -15,12 +15,10 @@ export const DEFAULT_CONFIG: Config = {
   watch: new Set(),
 };
 
+// Whole words, not substrings: the pattern CG must not approve CMA CGM.
 export function matchedPattern(v: Vessel, patterns: Pattern[]): Pattern | null {
-  const fields = [v.name.toLowerCase(), v.callsign.toLowerCase()];
-  return (
-    patterns.find((p) => p.text !== "" && fields.some((f) => f.includes(p.text.toLowerCase()))) ??
-    null
-  );
+  const words = new Set(`${v.name} ${v.callsign}`.toLowerCase().split(/[\s/-]+/));
+  return patterns.find((p) => p.text !== "" && words.has(p.text.toLowerCase())) ?? null;
 }
 
 export function listsFor(vessels: Vessel[], config: Config): Lists {

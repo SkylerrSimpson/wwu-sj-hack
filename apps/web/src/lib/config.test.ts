@@ -32,14 +32,21 @@ test("matchedPattern finds a pattern in the name and returns null when none matc
 });
 
 test("matchedPattern looks in the call sign too, ignoring case", () => {
-  expect(matchedPattern(vessel("Patrol one", "xwl123"), [wsf, xwl])).toEqual(xwl);
+  expect(matchedPattern(vessel("Patrol one", "xwl"), [wsf, xwl])).toEqual(xwl);
   expect(matchedPattern(vessel("wsf chelan"), [wsf])).toEqual(wsf);
+});
+
+test("matchedPattern matches whole words only, split on spaces, hyphens and slashes", () => {
+  const cg: Pattern = { text: "CG", label: "Coast Guard" };
+  expect(matchedPattern(vessel("CMA CGM MARCO POLO"), [cg])).toBeNull();
+  expect(matchedPattern(vessel("WSF-CHELAN/2"), [wsf])).toEqual(wsf);
+  expect(matchedPattern(vessel("Patrol one", "xwl123"), [xwl])).toBeNull();
 });
 
 test("matchedPattern takes the first pattern in order and skips empty text", () => {
   const empty: Pattern = { text: "", label: "Everything" };
-  const cheap: Pattern = { text: "CHE", label: "Che" };
-  expect(matchedPattern(vessel("WSF CHELAN"), [empty, cheap, wsf])).toEqual(cheap);
+  const chelan: Pattern = { text: "CHELAN", label: "Chelan" };
+  expect(matchedPattern(vessel("WSF CHELAN"), [empty, chelan, wsf])).toEqual(chelan);
   expect(matchedPattern(vessel("SEASPAN RAVEN"), [empty])).toBeNull();
 });
 

@@ -396,7 +396,7 @@ function ReplayView({ data }: { data: Data }) {
   return (
     <div className="relative h-dvh w-full overflow-hidden">
       <ShipMap
-        className="absolute inset-0"
+        className="absolute inset-0 isolate z-0"
         ring={data.boundary.ring}
         ships={ships}
         paths={paths}

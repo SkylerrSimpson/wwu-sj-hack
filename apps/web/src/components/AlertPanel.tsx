@@ -3,6 +3,9 @@
 import { startTransition, useEffect, useRef, useState } from "react";
 import { sendAlert } from "@/app/actions";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import type { Entry } from "@/lib/vessel";
 
 type Attempt = { key: string; entry: Entry; result: string };
@@ -48,56 +51,58 @@ export default function AlertPanel({ entries }: { entries: Entry[] }) {
   }, [entries, email]);
 
   return (
-    <section aria-labelledby="alerts-heading" className="my-2 text-sm">
-      <h2 id="alerts-heading" className="font-semibold">
-        Alerts
-      </h2>
-      <label htmlFor="alert-email" className="mt-1 block">
-        Email for alerts
-      </label>
-      <div className="mt-1 flex gap-2">
-        <input
-          id="alert-email"
-          type="email"
-          autoComplete="email"
-          value={email}
-          onChange={(e) => {
-            setEmail(e.target.value);
-            try {
-              localStorage.setItem("alertEmail", e.target.value);
-            } catch {
-              // Same: without storage the address is kept in state only.
+    <Card className="text-sm">
+      <CardHeader>
+        <CardTitle>Alerts</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <Label htmlFor="alert-email">Email for alerts</Label>
+        <div className="mt-1 flex gap-2">
+          <Input
+            id="alert-email"
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(e) => {
+              setEmail(e.target.value);
+              try {
+                localStorage.setItem("alertEmail", e.target.value);
+              } catch {
+                // Same: without storage the address is kept in state only.
+              }
+            }}
+          />
+          <Button
+            variant="outline"
+            onClick={() =>
+              send(`test:${Date.now()}`, {
+                vesselId: "demo",
+                name: "Demo vessel (synthetic)",
+                t: Math.floor(Date.now() / 1000),
+                lon: -122.7,
+                lat: 48.77,
+                status: "suspicious",
+              })
             }
-          }}
-          className="w-full rounded border border-neutral-300 px-2 py-1"
-        />
-        <Button
-          variant="outline"
-          onClick={() =>
-            send(`test:${Date.now()}`, {
-              vesselId: "demo",
-              name: "Demo vessel (synthetic)",
-              t: Math.floor(Date.now() / 1000),
-              lon: -122.7,
-              lat: 48.77,
-              status: "suspicious",
-            })
-          }
-        >
-          Send test alert
-        </Button>
-      </div>
-      <p className="mt-1 text-neutral-600">
-        The demo sender only delivers to the Resend account owner&apos;s inbox.
-      </p>
-      <ol className="mt-2 list-decimal pl-5">
-        {log.map((a) => (
-          <li key={a.key}>
-            {pacific.format(a.entry.t * 1000)}: {a.entry.name},{" "}
-            {a.entry.status === "watch" ? "watch list" : "suspicious"}, {a.result}
-          </li>
-        ))}
-      </ol>
-    </section>
+          >
+            Send test alert
+          </Button>
+        </div>
+        <p className="mt-1 text-neutral-600">
+          The demo sender only delivers to the Resend account owner&apos;s inbox.
+        </p>
+        <ol className="mt-2 list-decimal pl-5">
+          {log.map((a) => (
+            <li
+              key={a.key}
+              className="animate-in fade-in slide-in-from-bottom-1 duration-300 motion-reduce:animate-none"
+            >
+              {pacific.format(a.entry.t * 1000)}: {a.entry.name},{" "}
+              {a.entry.status === "watch" ? "watch list" : "suspicious"}, {a.result}
+            </li>
+          ))}
+        </ol>
+      </CardContent>
+    </Card>
   );
 }

@@ -14,6 +14,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { Path, Ship } from "@/components/ShipMap";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   DEFAULT_CONFIG,
@@ -229,7 +230,10 @@ function ReplayView({ data }: { data: Data }) {
       </div>
       <div className="space-y-4">
         {picked && (
-          <Card>
+          <Card
+            key={picked.id}
+            className="animate-in fade-in slide-in-from-bottom-1 duration-300 motion-reduce:animate-none"
+          >
             <CardHeader>
               <CardTitle>{picked.name}</CardTitle>
             </CardHeader>
@@ -264,35 +268,49 @@ function ReplayView({ data }: { data: Data }) {
             </CardContent>
           </Card>
         )}
-        <section
-          aria-labelledby="inwater-heading"
-          className="rounded border border-neutral-300 p-3"
-        >
-          <h2 id="inwater-heading" className="font-semibold">
-            In Lummi waters now ({rows.reduce((n, r) => n + r.count, 0)})
-          </h2>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Status</TableHead>
-                <TableHead>Kind</TableHead>
-                <TableHead className="text-right">Count</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((r) => (
-                <TableRow key={`${r.status}:${r.label}`}>
-                  <TableCell>{STATUS_WORD[r.status]}</TableCell>
-                  <TableCell>
-                    {r.label}
-                    <span className="block text-xs text-neutral-600">{r.names.join(", ")}</span>
-                  </TableCell>
-                  <TableCell className="text-right">{r.count}</TableCell>
+        <Card>
+          <CardHeader>
+            <CardTitle>In Lummi waters now ({rows.reduce((n, r) => n + r.count, 0)})</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Kind</TableHead>
+                  <TableHead className="text-right">Count</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </section>
+              </TableHeader>
+              <TableBody>
+                {rows.map((r) => (
+                  <TableRow
+                    key={`${r.status}:${r.label}`}
+                    className="animate-in fade-in slide-in-from-bottom-1 duration-300 motion-reduce:animate-none"
+                  >
+                    <TableCell>
+                      <Badge
+                        variant={
+                          r.status === "watch"
+                            ? "destructive"
+                            : r.status === "priority"
+                              ? "secondary"
+                              : "outline"
+                        }
+                      >
+                        {STATUS_WORD[r.status]}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {r.label}
+                      <span className="block text-xs text-neutral-600">{r.names.join(", ")}</span>
+                    </TableCell>
+                    <TableCell className="text-right">{r.count}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
         <ConfigPanel
           vessels={data.vessels.map((v) => ({ id: v.id, name: v.name }))}
           config={config}

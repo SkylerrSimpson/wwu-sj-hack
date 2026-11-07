@@ -294,17 +294,6 @@ function ReplayView({ data }: { data: Data }) {
           ))}
         </TableBody>
       </Table>
-      <p className="text-xs text-muted-foreground">
-        Green: {STATUS_WORD.priority}. Red: {STATUS_WORD.watch}. Orange: {STATUS_WORD.suspicious}.
-        Grey: {STATUS_WORD.unlisted}. Hover a dot for its name and status.
-      </p>
-      {radarOn && (
-        <p className="text-xs text-purple-900">
-          Dashed purple: where {RADAR_SITES.length} shore radars along the Lummi coast would see,
-          assuming a {RADAR_RANGE_M / 1000} km range for a small boat. The sites are hypothetical,
-          placed by eye. Radar would show boats that don&apos;t broadcast AIS, but not who they are.
-        </p>
-      )}
     </div>
   );
 

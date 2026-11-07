@@ -1,30 +1,14 @@
-import { data, sourceOf } from "@/lib/data";
+import Replay from "@/components/Replay";
+import { data } from "@/lib/data";
 
 export default function Home() {
   return (
     <>
-      <main className="mx-auto w-full max-w-2xl flex-1 p-6">
-        <h1 className="text-2xl font-semibold">Walking skeleton</h1>
-        <p className="mt-2 text-sm text-neutral-600">
-          {data.records.length} records from {data.sources.length} source
-          {data.sources.length === 1 ? "" : "s"}.
-        </p>
-        <ul role="list" className="mt-6 space-y-2">
-          {data.records.map((item) => {
-            const source = sourceOf(item);
-            return (
-              <li key={item.id} className="rounded border border-neutral-300 p-3">
-                {item.name}
-                <span className="block text-xs text-neutral-600">
-                  {source?.name}, retrieved{" "}
-                  <time dateTime={source?.retrieved}>{source?.retrieved}</time>
-                </span>
-              </li>
-            );
-          })}
-        </ul>
+      <main className="mx-auto w-full max-w-5xl flex-1 p-4">
+        <h1 className="text-2xl font-semibold">Lummi Vessel Tracker</h1>
+        <Replay data={data} />
       </main>
-      <footer className="mx-auto w-full max-w-2xl px-6 pb-6 text-sm text-neutral-600">
+      <footer className="mx-auto w-full max-w-5xl px-4 pb-4 text-sm text-neutral-600">
         Data:{" "}
         {data.sources.map((s) => (
           <span key={s.id}>

@@ -2,6 +2,7 @@
 
 import * as L from "leaflet";
 import { useEffect, useRef } from "react";
+import { useTheme } from "@/components/useTheme";
 import { arrowShape } from "@/lib/heading";
 import { callsignText } from "@/lib/privacy";
 import { STATUS_WORD, type ShipStatus } from "@/lib/status";
@@ -29,11 +30,23 @@ const escape = (text: string) =>
     (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] ?? c,
   );
 
-const STATUS_COLOR: Record<ShipStatus, string> = {
+const LIGHT = {
   priority: "#15803d",
   watch: "#b91c1c",
   suspicious: "#d97706",
   unlisted: "#737373",
+  boundary: "#b91c1c",
+  radar: "#7e22ce",
+};
+type Palette = typeof LIGHT;
+// In dark mode globals.css inverts the tiles, and the 700 shades sink into them; the 400s read.
+const DARK: Palette = {
+  priority: "#4ade80",
+  watch: "#f87171",
+  suspicious: "#fbbf24",
+  unlisted: "#a3a3a3",
+  boundary: "#f87171",
+  radar: "#c084fc",
 };
 
 const dotRadius = (s: Ship, selectedId: string | null) => (s.id === selectedId ? 8 : 5);
@@ -44,6 +57,7 @@ function drawArrows(
   arrows: Map<string, L.Polyline>,
   ships: Ship[],
   selectedId: string | null,
+  color: Palette,
 ) {
   const seen = new Set<string>();
   for (const s of ships) {
@@ -59,7 +73,7 @@ function drawArrows(
       arrow = L.polyline(parts, { weight: 2, interactive: false }).addTo(m);
       arrows.set(s.id, arrow);
     } else arrow.setLatLngs(parts);
-    arrow.setStyle({ color: STATUS_COLOR[s.status], opacity: 0.9 });
+    arrow.setStyle({ color: color[s.status], opacity: 0.9 });
   }
   for (const [id, arrow] of arrows) {
     if (seen.has(id)) continue;
@@ -76,7 +90,7 @@ export default function ShipMap({
   coverage = [],
   selectedId = null,
   onSelect,
-  className = "h-[60vh] w-full rounded border border-neutral-300",
+  className = "h-[60vh] w-full rounded border border-border",
 }: {
   ring: number[][];
   ships: Ship[];
@@ -90,13 +104,17 @@ export default function ShipMap({
   const map = useRef<L.Map | null>(null);
   const markers = useRef(new Map<string, L.CircleMarker>());
   const arrows = useRef(new Map<string, L.Polyline>());
-  const latest = useRef<{ ships: Ship[]; selectedId: string | null }>({
+  const latest = useRef<{ ships: Ship[]; selectedId: string | null; color: Palette }>({
     ships: [],
     selectedId: null,
+    color: LIGHT,
   });
   const pathLayer = useRef<L.LayerGroup | null>(null);
   const coverageLayer = useRef<L.LayerGroup | null>(null);
   const select = useRef(onSelect);
+  const boundary = useRef<L.Polygon | null>(null);
+  const [theme] = useTheme();
+  const color = theme === "dark" ? DARK : LIGHT;
 
   useEffect(() => {
     select.current = onSelect;
@@ -116,10 +134,18 @@ export default function ShipMap({
     pathLayer.current = L.layerGroup().addTo(m);
     coverageLayer.current = L.layerGroup().addTo(m);
     const latLngs: [number, number][] = ring.map(([lon = 0, lat = 0]) => [lat, lon]);
-    L.polygon(latLngs, { color: "#b91c1c", weight: 2, fill: false }).addTo(m);
+    boundary.current = L.polygon(latLngs, { color: color.boundary, weight: 2, fill: false }).addTo(
+      m,
+    );
     m.fitBounds(latLngs);
     m.on("zoomend", () =>
-      drawArrows(m, arrows.current, latest.current.ships, latest.current.selectedId),
+      drawArrows(
+        m,
+        arrows.current,
+        latest.current.ships,
+        latest.current.selectedId,
+        latest.current.color,
+      ),
     );
     map.current = m;
     const created = markers.current;
@@ -130,9 +156,15 @@ export default function ShipMap({
       createdArrows.clear();
       pathLayer.current = null;
       coverageLayer.current = null;
+      boundary.current = null;
       map.current = null;
     };
   }, [ring]);
+
+  // A theme change restyles in place; rebuilding the map on it would throw away the zoom and pan.
+  useEffect(() => {
+    boundary.current?.setStyle({ color: color.boundary });
+  }, [color]);
 
   useEffect(() => {
     const layer = coverageLayer.current;
@@ -141,7 +173,7 @@ export default function ShipMap({
     for (const c of coverage) {
       L.circle([c.lat, c.lon], {
         radius: c.rangeM,
-        color: "#7e22ce",
+        color: color.radar,
         weight: 1,
         dashArray: "4 4",
         fillOpacity: 0.06,
@@ -155,7 +187,7 @@ export default function ShipMap({
       });
       L.marker([c.lat, c.lon], { icon: tag, keyboard: false, interactive: false }).addTo(layer);
     }
-  }, [coverage]);
+  }, [coverage, color]);
 
   useEffect(() => {
     const layer = pathLayer.current;
@@ -165,12 +197,12 @@ export default function ShipMap({
       const selected = p.id === selectedId;
       L.polyline(p.latLngs, {
         pane: "paths",
-        color: STATUS_COLOR[p.status],
+        color: color[p.status],
         weight: selected ? 3 : 1,
         opacity: selected ? 0.9 : 0.5,
       }).addTo(layer);
     }
-  }, [paths, selectedId]);
+  }, [paths, selectedId, color]);
 
   // Markers are moved in place each tick; a vessel with no position is removed.
   useEffect(() => {
@@ -191,8 +223,8 @@ export default function ShipMap({
       }
       marker.setLatLng([s.lat, s.lon]);
       marker.setStyle({
-        color: STATUS_COLOR[s.status],
-        fillColor: STATUS_COLOR[s.status],
+        color: color[s.status],
+        fillColor: color[s.status],
         radius: dotRadius(s, selectedId),
       });
       marker.setTooltipContent(`${escape(s.name)} (${escape(s.type)}), ${STATUS_WORD[s.status]}`);
@@ -211,9 +243,9 @@ export default function ShipMap({
       marker.remove();
       markers.current.delete(id);
     }
-    latest.current = { ships, selectedId };
-    drawArrows(m, arrows.current, ships, selectedId);
-  }, [ships, selectedId]);
+    latest.current = { ships, selectedId, color };
+    drawArrows(m, arrows.current, ships, selectedId, color);
+  }, [ships, selectedId, color]);
 
   return (
     <div

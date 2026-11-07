@@ -1,5 +1,6 @@
 import { DEFAULT_CONFIG, parseConfig, serializeConfig, type Config } from "@/lib/config";
 import { DEFAULT_FILTER, parseFilter, serializeFilter, type Filter } from "@/lib/stats";
+import type { Theme } from "@/lib/theme";
 
 export type StorageLike = {
   getItem(k: string): string | null;
@@ -10,6 +11,7 @@ const CONFIG_KEY = "vesselConfig";
 const EMAIL_KEY = "alertEmail";
 const PANEL_KEY = "panelWidth";
 const FILTER_KEY = "plotFilter";
+const THEME_KEY = "theme";
 
 // Storage can throw (private mode, quota, blocked); it then reads as empty and drops writes.
 const read = (storage: StorageLike, key: string): string | null => {
@@ -51,3 +53,9 @@ export const readFilter = (storage: StorageLike): Filter =>
 
 export const writeFilter = (storage: StorageLike, f: Filter): void =>
   write(storage, FILTER_KEY, serializeFilter(f));
+
+// Raw, so lib/theme decides what counts as a saved choice.
+export const readTheme = (storage: StorageLike): string | null => read(storage, THEME_KEY);
+
+export const writeTheme = (storage: StorageLike, theme: Theme): void =>
+  write(storage, THEME_KEY, theme);

@@ -50,6 +50,7 @@
 }
 
 :root {
+  color-scheme: light;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -85,6 +86,7 @@
 }
 
 .dark {
+  color-scheme: dark;
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.205 0 0);
@@ -116,6 +118,40 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+}
+
+/* OpenStreetMap serves light tiles only. The filter stays on the tile pane; markers, paths and popups draw as they are. */
+.dark .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(0.95) contrast(0.9);
+}
+.dark .leaflet-container {
+  background: var(--muted);
+}
+.dark .leaflet-popup-content-wrapper,
+.dark .leaflet-popup-tip,
+.dark .leaflet-tooltip,
+.dark .leaflet-bar a,
+.dark .leaflet-control-attribution {
+  background: var(--background);
+  color: var(--foreground);
+  border-color: var(--border);
+}
+.dark .leaflet-bar a:hover,
+.dark .leaflet-bar a:focus,
+.dark .leaflet-bar a.leaflet-disabled {
+  background: var(--muted);
+}
+.dark .leaflet-tooltip-top::before {
+  border-top-color: var(--background);
+}
+.dark .leaflet-tooltip-bottom::before {
+  border-bottom-color: var(--background);
+}
+.dark .leaflet-tooltip-left::before {
+  border-left-color: var(--background);
+}
+.dark .leaflet-tooltip-right::before {
+  border-right-color: var(--background);
 }
 
 @layer base {

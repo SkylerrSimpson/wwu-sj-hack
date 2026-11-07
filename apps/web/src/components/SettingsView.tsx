@@ -18,7 +18,7 @@ export default function SettingsView({ vessels }: { vessels: { id: string; name:
 
   return (
     <>
-      <p className="bg-amber-100 px-4 py-1 text-xs text-amber-900">
+      <p className="bg-amber-100 px-4 py-1 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-100">
         Approved list invented for this demo; no vessel shown is suspected of anything.
       </p>
       <main className="mx-auto w-full max-w-3xl flex-1 space-y-4 p-4 animate-in fade-in slide-in-from-bottom-1 duration-300 motion-reduce:animate-none">

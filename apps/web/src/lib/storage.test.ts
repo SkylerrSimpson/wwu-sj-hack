@@ -6,10 +6,12 @@ import {
   readEmail,
   readFilter,
   readPanelWidth,
+  readTheme,
   writeConfig,
   writeEmail,
   writeFilter,
   writePanelWidth,
+  writeTheme,
   type StorageLike,
 } from "./storage";
 
@@ -59,7 +61,17 @@ test("readEmail is empty when missing and writeEmail stores under alertEmail", (
   expect(readEmail(storage)).toBe("staff@example.org");
 });
 
+test("readTheme is null when missing and writeTheme stores under theme", () => {
+  const { map, storage } = fake();
+  expect(readTheme(storage)).toBeNull();
+  writeTheme(storage, "dark");
+  expect([...map.keys()]).toEqual(["theme"]);
+  expect(readTheme(storage)).toBe("dark");
+});
+
 test("a storage that throws reads as empty and drops writes without throwing", () => {
+  expect(readTheme(throwing)).toBeNull();
+  expect(() => writeTheme(throwing, "dark")).not.toThrow();
   expect(readConfig(throwing)).toEqual(DEFAULT_CONFIG);
   expect(readEmail(throwing)).toBe("");
   expect(() => writeConfig(throwing, DEFAULT_CONFIG)).not.toThrow();

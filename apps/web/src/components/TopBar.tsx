@@ -1,10 +1,11 @@
 "use client";
 
-import { Eye, EyeOff, Menu, Pause, Play } from "lucide-react";
+import { Eye, EyeOff, Menu, Moon, Pause, Play, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useTheme } from "@/components/useTheme";
 
 export type TopBarProps = {
   mode: "replay" | "live";
@@ -40,11 +41,28 @@ const Z = "z-10";
 const selectClass =
   "h-7 rounded-lg border border-input bg-transparent px-2 text-[0.8rem] outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
 
+function ThemeToggle() {
+  const [theme, toggle] = useTheme();
+  const label = theme === "dark" ? "Switch to light mode" : "Switch to dark mode";
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={<Button size="icon-sm" variant="ghost" aria-label={label} onClick={toggle} />}
+      >
+        {theme === "dark" ? <Sun /> : <Moon />}
+      </TooltipTrigger>
+      <TooltipContent side="bottom">{label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 export default function TopBar(p: TopBarProps) {
   if (!p.overlayShown)
     return (
       <>
-        <p className={`fixed inset-x-0 top-0 ${Z} bg-amber-100 px-3 py-1 text-xs text-amber-900`}>
+        <p
+          className={`fixed inset-x-0 top-0 ${Z} bg-amber-100 px-3 py-1 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-100`}
+        >
           {p.banner}
         </p>
         <Button
@@ -172,6 +190,7 @@ export default function TopBar(p: TopBarProps) {
           <Label htmlFor="paths">Paths</Label>
           <Switch id="radar" size="sm" checked={p.showRadar} onCheckedChange={p.onShowRadar} />
           <Label htmlFor="radar">Radar</Label>
+          <ThemeToggle />
           <Tooltip>
             <TooltipTrigger
               render={
@@ -189,7 +208,9 @@ export default function TopBar(p: TopBarProps) {
           </Tooltip>
         </div>
       </div>
-      <p className="flex h-7 items-center bg-amber-100 px-3 text-xs text-amber-900">{p.banner}</p>
+      <p className="flex h-7 items-center bg-amber-100 px-3 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-100">
+        {p.banner}
+      </p>
     </header>
   );
 }

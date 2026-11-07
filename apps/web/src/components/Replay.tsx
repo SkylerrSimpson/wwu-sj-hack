@@ -45,6 +45,8 @@ const CAVEAT = "Approximate boundary, not a legal boundary.";
 
 type Mode = "replay" | "live";
 type Feed = { status: string; last_message_age_s: number | null };
+// When the browser last heard anything from the streamer, so the age on screen keeps counting.
+type Heard = number | null;
 
 const clock = new Intl.DateTimeFormat("en-US", {
   timeZone: "America/Los_Angeles",
@@ -111,6 +113,7 @@ function ReplayView({ data }: { data: Data }) {
   const [mode, setMode] = useState<Mode>("replay");
   const [live, setLive] = useState<Map<string, Vessel>>(new Map());
   const [feed, setFeed] = useState<Feed | null>(null);
+  const [heard, setHeard] = useState<Heard>(null);
   const [now, setNow] = useState(() => Date.now() / 1000);
   // Each mode keeps its own "last tick", so switching modes never opens a giant entry window.
   const prev = useRef<Record<Mode, number>>({ replay: start + 1800, live: Date.now() / 1000 });
@@ -137,17 +140,20 @@ function ReplayView({ data }: { data: Data }) {
         return next;
       });
       if (p?.feed) setFeed(p.feed);
+      setHeard(Date.now() / 1000);
     });
     es.addEventListener("vessel", (e) => {
       const r = parseRecord(parse(e));
       if (r) setLive((m) => merge(m, r));
+      setHeard(Date.now() / 1000);
     });
     es.addEventListener("status", (e) => {
       const f = parse(e) as Feed | null;
       if (f) setFeed(f);
+      setHeard(Date.now() / 1000);
     });
     es.onerror = () => setFeed({ status: "down", last_message_age_s: null });
-    const tick = setInterval(() => setNow(Date.now() / 1000), 2000);
+    const tick = setInterval(() => setNow(Date.now() / 1000), 1000);
     return () => {
       es.close();
       clearInterval(tick);
@@ -239,7 +245,7 @@ function ReplayView({ data }: { data: Data }) {
   const feedText =
     mode === "live"
       ? `Feed ${feed?.status ?? "connecting"}${
-          feed?.last_message_age_s == null ? "" : `, ${Math.round(feed.last_message_age_s)} s ago`
+          heard === null ? "" : `, last message ${Math.max(0, Math.round(now - heard))} s ago`
         }`
       : undefined;
 

@@ -8,6 +8,8 @@ export type Ship = {
   id: string;
   name: string;
   type: string;
+  lengthM: number | null;
+  callsign: string;
   status: ShipStatus;
   lon: number;
   lat: number;
@@ -97,6 +99,7 @@ export default function ShipMap({
         );
         marker.on("click", () => select.current?.(s.id));
         marker.bindTooltip("");
+        marker.bindPopup("");
         markers.current.set(s.id, marker);
       }
       marker.setLatLng([s.lat, s.lon]);
@@ -106,6 +109,15 @@ export default function ShipMap({
         radius: s.id === selectedId ? 8 : 5,
       });
       marker.setTooltipContent(`${s.name} (${s.type}), ${STATUS_WORD[s.status]}`);
+      marker.setPopupContent(
+        [
+          `<strong>${s.name}</strong>`,
+          `${s.type}${s.lengthM ? `, ${s.lengthM} m` : ""}`,
+          `Status: ${STATUS_WORD[s.status]}`,
+          `Call sign: ${s.callsign || "not broadcast"}`,
+          `AIS id: ${s.id}`,
+        ].join("<br>"),
+      );
     }
     for (const [id, marker] of markers.current) {
       if (seen.has(id)) continue;

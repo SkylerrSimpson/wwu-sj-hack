@@ -148,7 +148,18 @@ function ReplayView({ data }: { data: Data }) {
   const ships: Ship[] = data.vessels.flatMap((v) => {
     const p = positionAt(v.track, t);
     return p
-      ? [{ id: v.id, name: v.name, type: v.type, status: statusOf(v), lon: p[0], lat: p[1] }]
+      ? [
+          {
+            id: v.id,
+            name: v.name,
+            type: v.type,
+            lengthM: v.length_m,
+            callsign: v.callsign,
+            status: statusOf(v),
+            lon: p[0],
+            lat: p[1],
+          },
+        ]
       : [];
   });
 

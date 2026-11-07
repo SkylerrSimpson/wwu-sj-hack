@@ -56,7 +56,17 @@ To run without Docker, for development: `uv sync`, then `AIS_API_KEY=... STREAME
 
 ### Expose it
 
-The live site needs public HTTPS, for example Tailscale Funnel or a Cloudflare Tunnel pointing at `127.0.0.1:8787`. With nginx, turn proxy buffering off for `/v1/stream` (`proxy_buffering off;`), or events arrive in lumps.
+The live site needs public HTTPS. Tailscale Funnel gives it for free, with no domain, no open router ports and no proxy to configure: run `sudo tailscale funnel --bg 8787` on the host, and it prints a stable `https://<host>.<tailnet>.ts.net` address that forwards to the streamer. With nginx instead, turn proxy buffering off for `/v1/stream` (`proxy_buffering off;`), or events arrive in lumps.
+
+### Keep it up to date
+
+`deploy/update.sh` pulls `main` and rebuilds the streamer when files under `apps/streamer` changed. Run it from cron each minute, and the team deploys by pushing to `main`, with no access to the host:
+
+```sh
+( crontab -l 2>/dev/null; echo "* * * * * sh $PWD/deploy/update.sh >> $HOME/streamer-deploy.log 2>&1" ) | crontab -
+```
+
+Anyone who can push to `main` changes what runs on the host, inside an unprivileged container. To review each deploy instead, remove the cron line and run the script by hand. A read-only deploy key is enough for the host to pull.
 
 ## API
 

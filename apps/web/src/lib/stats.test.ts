@@ -185,3 +185,35 @@ test("tilesFor covers the box with OSM tiles whose edges bracket it", () => {
   expect(world?.west).toBe(-180);
   expect(world?.north).toBeCloseTo(85.0511, 3);
 });
+
+test("countsOverTime gives the same counts on a second call over the same tracks", () => {
+  const square = [
+    [0, 0],
+    [1, 0],
+    [1, 1],
+    [0, 1],
+    [0, 0],
+  ];
+  const v = {
+    id: "a",
+    source: "t",
+    name: "a",
+    type: "Tug",
+    length_m: null,
+    callsign: "",
+    fleet: null,
+    priority: false,
+    track: [
+      [0, 0.5, 0.5],
+      [60, 2, 2],
+      [120, 0.5, 0.5],
+    ],
+  };
+  const first = countsOverTime([v], 0, 180, 60, square);
+  expect(first).toEqual([
+    { t: 0, count: 1 },
+    { t: 60, count: 0 },
+    { t: 120, count: 1 },
+  ]);
+  expect(countsOverTime([v], 0, 180, 60, square)).toEqual(first);
+});

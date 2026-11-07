@@ -33,7 +33,7 @@ export type SidePanelProps = {
 };
 
 const TABS: [SidePanelTab, string][] = [
-  ["water", "In the water"],
+  ["water", "Inside"],
   ["lists", "Lists"],
   ["alerts", "Alerts"],
   ["vessel", "Vessel"],
@@ -152,9 +152,13 @@ export default function SidePanel({
           <div className="mx-auto h-full w-0.5 group-hover/handle:bg-ring group-focus-visible/handle:bg-ring" />
         </div>
         <div className="flex items-center gap-1 border-b p-2">
-          <TabsList className="w-full">
+          <TabsList className="min-w-0 flex-1">
             {TABS.map(([key, label]) => (
-              <TabsTrigger key={key} value={key} className="px-1 text-xs">
+              <TabsTrigger
+                key={key}
+                value={key}
+                className="min-w-0 px-1 text-xs whitespace-normal leading-tight"
+              >
                 {label}
                 {counts?.[key] !== undefined && (
                   <Badge variant="secondary" className="px-1.5">
@@ -170,6 +174,7 @@ export default function SidePanel({
                 <Button
                   size="icon-sm"
                   variant="ghost"
+                  className="shrink-0"
                   aria-label="Hide panel"
                   onClick={() => onCollapse(true)}
                 />

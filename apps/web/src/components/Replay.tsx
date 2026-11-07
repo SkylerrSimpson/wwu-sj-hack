@@ -28,7 +28,7 @@ import type { Coverage, Path, Ship } from "@/components/ShipMap";
 import { labelOf, listsFor, moveTo } from "@/lib/config";
 import type { Data, Vessel } from "@/lib/data";
 import { directionAt } from "@/lib/heading";
-import { merge, parseRecord } from "@/lib/live";
+import { merge, parseRecord, type LiveRecord } from "@/lib/live";
 import { RADAR_RANGE_M, RADAR_SITES } from "@/lib/radar";
 import { callsignText } from "@/lib/privacy";
 import {
@@ -122,6 +122,8 @@ export default function Replay() {
   const [data, setData] = useState<Data | null>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
+    // The map chunk downloads beside the data instead of after it.
+    void import("./ShipMap");
     fetch("/data.json")
       .then((r) => (r.ok ? (r.json() as Promise<Data>) : Promise.reject(new Error(r.statusText))))
       .then(setData)
@@ -187,12 +189,11 @@ function ReplayView({ data }: { data: Data }) {
       if (p?.feed) setFeed(p.feed);
       setHeard(Date.now() / 1000);
     });
+    // Events wait in a queue and land once a second in one render, not one render per event.
+    const pending: LiveRecord[] = [];
     es.addEventListener("vessel", (e) => {
       const r = parseRecord(parse(e));
-      if (r) {
-        setLive((m) => merge(m, r));
-        setHeadings((h) => new Map(h).set(r.id, r.heading));
-      }
+      if (r) pending.push(r);
       setHeard(Date.now() / 1000);
     });
     es.addEventListener("status", (e) => {
@@ -201,7 +202,17 @@ function ReplayView({ data }: { data: Data }) {
       setHeard(Date.now() / 1000);
     });
     es.onerror = () => setFeed({ status: "down", last_message_age_s: null });
-    const tick = setInterval(() => setNow(Date.now() / 1000), 1000);
+    const tick = setInterval(() => {
+      setNow(Date.now() / 1000);
+      if (!pending.length) return;
+      const batch = pending.splice(0);
+      setLive((m) => batch.reduce(merge, m));
+      setHeadings((h) => {
+        const next = new Map(h);
+        for (const r of batch) next.set(r.id, r.heading);
+        return next;
+      });
+    }, 1000);
     return () => {
       es.close();
       clearInterval(tick);
@@ -234,13 +245,17 @@ function ReplayView({ data }: { data: Data }) {
     filter.end !== null
       ? plotTo
       : Math.max(plotFrom, Math.min(plotTo, plotFrom + Math.ceil((at - plotFrom) / step) * step));
+  // Computed only while the drawer is open: nothing else shows them, and they cost a frame.
   const plots = useMemo(
-    () => ({
-      series: countsOverTime(shown, plotFrom, cut, step, data.boundary.ring),
-      pie: byCategory(shown, plotFrom, cut),
-      heat: heatmap(shown, plotFrom, cut, box, HEAT_COLS, heatRows),
-    }),
-    [shown, plotFrom, cut, step, box, heatRows, data.boundary.ring],
+    () =>
+      menuOpen
+        ? {
+            series: countsOverTime(shown, plotFrom, cut, step, data.boundary.ring),
+            pie: byCategory(shown, plotFrom, cut),
+            heat: heatmap(shown, plotFrom, cut, box, HEAT_COLS, heatRows),
+          }
+        : null,
+    [menuOpen, shown, plotFrom, cut, step, box, heatRows, data.boundary.ring],
   );
   const types =
     filter.categories.size === CATEGORIES.length
@@ -574,16 +589,18 @@ function ReplayView({ data }: { data: Data }) {
           </Button>
         </div>
         <FilterPanel filter={filter} onFilter={setFilter} start={start} end={end} />
-        <Plots
-          summary={plotSummary}
-          from={plotFrom}
-          to={plotTo}
-          cut={cut}
-          step={step}
-          box={box}
-          ring={data.boundary.ring}
-          {...plots}
-        />
+        {plots && (
+          <Plots
+            summary={plotSummary}
+            from={plotFrom}
+            to={plotTo}
+            cut={cut}
+            step={step}
+            box={box}
+            ring={data.boundary.ring}
+            {...plots}
+          />
+        )}
         <div className="flex items-center gap-3 border-t pt-3">
           <SignOutButton />
           <Link href="/settings" className="text-sm underline">

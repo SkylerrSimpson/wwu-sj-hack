@@ -71,6 +71,22 @@ export function stepFor(span: number): number {
 }
 
 // Distinct vessels with at least one fix in each bucket [t, t + step).
+// One inside flag per fix, computed once per track and ring: the charts re-run on every move of
+// the time cut and would otherwise ray-cast all 124,000 fixes each time (measured 468 ms).
+const insideFlags = new WeakMap<number[][], WeakMap<number[][], Uint8Array>>();
+function flagsFor(track: number[][], ring: number[][]): Uint8Array {
+  let byRing = insideFlags.get(ring);
+  if (!byRing) insideFlags.set(ring, (byRing = new WeakMap()));
+  const cached = byRing.get(track);
+  if (cached) return cached;
+  const flags = new Uint8Array(track.length);
+  track.forEach(([, lon = 0, lat = 0], k) => {
+    flags[k] = isInside(lon, lat, ring) ? 1 : 0;
+  });
+  byRing.set(track, flags);
+  return flags;
+}
+
 export function countsOverTime(
   vessels: Vessel[],
   start: number,
@@ -80,11 +96,13 @@ export function countsOverTime(
 ): { t: number; count: number }[] {
   const counts = Array.from({ length: Math.max(0, Math.ceil((end - start) / step)) }, () => 0);
   for (const v of vessels) {
+    const flags = flagsFor(v.track, ring);
     let last = -1;
-    for (const [t = 0, lon = 0, lat = 0] of v.track) {
+    for (let k = 0; k < v.track.length; k++) {
+      const t = v.track[k]?.[0] ?? 0;
       if (t < start || t >= end) continue;
       const i = Math.floor((t - start) / step);
-      if (i === last || !isInside(lon, lat, ring)) continue;
+      if (i === last || !flags[k]) continue;
       counts[i] = (counts[i] ?? 0) + 1;
       last = i;
     }

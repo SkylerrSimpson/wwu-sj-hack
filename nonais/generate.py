@@ -1,4 +1,4 @@
-"""Synthetic radar and LIDAR data for Lummi waters. The sensors are not real.
+"""Synthetic radar, LIDAR and hydrophone data for Lummi waters. The sensors are not real.
 
 Usage: python generate.py <repo data.json> <out dir> <web file>
   e.g. python generate.py ../apps/web/public/data.json . ../apps/web/public/sensors.json
@@ -10,13 +10,17 @@ the unidentified boat the proof of concept is about.
 Writes two files to <out dir>, for plotting and scoring:
 - `detections.csv`: one row per sensor hit. Each row has the sensor's estimate (position,
   size, speed, boat or not, confidence) and the ground truth behind it; `truth_ais_id` is the
-  data.json vessel id when the object broadcasts AIS, else empty.
+  data.json vessel id when the object broadcasts AIS, else empty. Hydrophone rows have a
+  bearing, SNR and frequency instead of a position, and `ais_match` when an AIS vessel lies on
+  that bearing. Radar rows also carry `heard`, `fused_boat` and `fused_confidence`: radar
+  combined with the hydrophones.
 - `sensors.json`: `sources`, `sensors` (where each sits, what it covers, how noisy it is),
   `vessels` (radar tracks of the boats, ids `radar-n`, same fields as data.json vessels) and
   `truth` (each radar track's object and AIS vessel id, for scoring a match only).
 
 And <web file>, what the app reads: `sources`, the sensors' coverage, the radar tracks and the
-detections, with no ground truth.
+detections, with no ground truth. Hydrophones are left out of it until the app's types
+(lib/sensors.ts) have a bearing-only detection.
 """
 
 import csv
@@ -25,6 +29,7 @@ import math
 import random
 import statistics
 import sys
+from collections import defaultdict
 from datetime import UTC, datetime
 from itertools import pairwise
 from pathlib import Path
@@ -43,7 +48,7 @@ DETECTION_KEYS = ("t", "sensor", "kind", "lon", "lat", "size_m", "boat", "label"
 
 SOURCE = {
     "id": "synthetic-sensors",
-    "name": "Synthetic radar and LIDAR data, invented for the demo",
+    "name": "Synthetic radar, LIDAR and hydrophone data, invented for the demo",
     "url": "https://github.com/SkylerrSimpson/wwu-sj-hack",
     "retrieved": "2026-11-07",
 }
@@ -77,6 +82,45 @@ SENSORS: list[dict[str, Any]] = [
         "judge_noise": 0.4,
     },
 ]
+
+# Hydrophones hear engines, not hulls: each hit is a bearing, an SNR and a frequency.
+HYDROPHONES: list[dict[str, Any]] = [
+    {
+        "id": "hydro-gooseberry",
+        "kind": "hydrophone",
+        "name": "Hydrophone, off Gooseberry Point (synthetic)",
+        "lon": -122.690,
+        "lat": 48.748,
+        "every_s": SWEEP,
+    },
+    {
+        "id": "hydro-sandy-pt",
+        "kind": "hydrophone",
+        "name": "Hydrophone, off Sandy Point (synthetic)",
+        "lon": -122.728,
+        "lat": 48.783,
+        "every_s": SWEEP,
+    },
+]
+DETECT_SNR_DB = 6
+SQUALL = (T0 + 5400, T0 + 8100)  # 06:30 to 07:15 UTC, rain raises the noise floor
+# Ship-loading pumps at the Cherry Point piers hum like an engine from a fixed bearing.
+CHERRY_PT = (-122.755, 48.862)  # rough, placed by eye
+PUMPING = (T0 + 3 * 3600, T0 + 5 * 3600)
+ENGINE_ON_KN = 0.5  # slower than this, a boat is taken to have its engine off
+HEARD_WITHIN_DEG = 8
+SAME_BOAT_M = 500  # an AIS vessel this close to a radar contact is taken to be that contact
+NEAR_HYDROPHONE_M = 4000
+
+# detections.csv columns; a row leaves blank what its sensor doesn't measure.
+COLUMNS = [
+    "t", "time_utc", "sensor", "kind",
+    "lon", "lat", "size_m", "speed_kn", "course_deg",
+    "bearing_deg", "snr_db", "freq_hz", "ais_match",
+    "boat", "label", "confidence",
+    "heard", "fused_boat", "fused_confidence",
+    "truth_id", "truth_kind", "truth_ais_id",
+]  # fmt: skip
 
 # Invented ground truth: boats without AIS and things that aren't boats.
 # Legs are (lon, lat, minutes to reach it, minutes to stay there).
@@ -152,6 +196,118 @@ def offset_m(lon: float, lat: float, olon: float, olat: float) -> tuple[float, f
 def sees(sensor: dict, lon: float, lat: float) -> bool:
     east, north = offset_m(lon, lat, sensor["lon"], sensor["lat"])
     return math.hypot(east, north) <= sensor["range_m"]
+
+
+def angle_diff(a: float, b: float) -> float:
+    return abs((a - b + 180) % 360 - 180)
+
+
+def range_bearing(sensor: dict, lon: float, lat: float) -> tuple[float, float]:
+    east, north = offset_m(lon, lat, sensor["lon"], sensor["lat"])
+    return math.hypot(east, north), math.degrees(math.atan2(east, north)) % 360
+
+
+def ambient_db(t: int) -> float:
+    """Background noise: wind rising and falling over the night, plus a rain squall."""
+    return 92 + 3 * math.sin((t - T0) / 3600) + (12 if SQUALL[0] <= t < SQUALL[1] else 0)
+
+
+def source_db(size: float, speed: float) -> float:
+    # shortcut: a rule of thumb for engine noise, not measured levels; replace with recordings.
+    return 135 + 15 * math.log10(size) + 1.2 * min(speed, 15)
+
+
+def loss_db(r: float) -> float:
+    # Between spherical and cylindrical spreading, as in shallow water, plus absorption.
+    return 15 * math.log10(max(r, 1)) + 0.6 * r / 1000
+
+
+def listen(h: dict, t: int, engines: list[tuple], rng: random.Random) -> list[dict]:
+    """What one hydrophone hears at t. engines: (object, lon, lat, speed_kn)."""
+    noise = ambient_db(t) + rng.gauss(0, 1)
+    sounds = []
+    for o, lon, lat, speed in engines:
+        r, bearing = range_bearing(h, lon, lat)
+        snr = source_db(o["size_m"], speed) - loss_db(r) - noise + rng.gauss(0, 2)
+        freq = 2400 / o["size_m"] * rng.uniform(0.8, 1.2)  # bigger engines turn slower
+        sounds.append((snr, bearing, freq, o))
+    if PUMPING[0] <= t < PUMPING[1]:
+        r, bearing = range_bearing(h, *CHERRY_PT)
+        pier = {"id": "cherry-pt-pier", "kind": "industrial"}
+        sounds.append(
+            (165 - loss_db(r) - noise + rng.gauss(0, 2), bearing, rng.uniform(100, 140), pier)
+        )
+    # Orca calls and clicks: brief, from anywhere, sometimes low enough to pass for an engine.
+    if rng.random() < 0.02:
+        orca = {"id": "orca", "kind": "orca"}
+        sounds.append((rng.uniform(8, 25), rng.uniform(0, 360), rng.uniform(1000, 20000), orca))
+    rows = []
+    for snr, bearing, freq, truth in sounds:
+        if snr < DETECT_SNR_DB:
+            continue
+        # A sound 10 dB louder from within 10 degrees masks this one.
+        if any(s - snr >= 10 and angle_diff(b, bearing) < 10 for s, b, _, _ in sounds):
+            continue
+        boat = freq < 3000
+        rows.append(
+            {
+                "t": t,
+                "time_utc": datetime.fromtimestamp(t, UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "sensor": h["id"],
+                "kind": h["kind"],
+                "bearing_deg": round((bearing + rng.gauss(0, 1.5 + 30 / snr)) % 360),
+                "snr_db": round(snr, 1),
+                "freq_hz": round(freq),
+                "boat": boat,
+                "label": "engine" if boat else "biologic",
+                "confidence": round(min(0.99, 0.5 + snr / 40), 2),
+                "truth_id": truth["id"],
+                "truth_kind": truth["kind"],
+                "truth_ais_id": truth["id"] if "path" in truth else "",
+            }
+        )
+    return rows
+
+
+def fuse(rows: list[dict], ais_paths: dict[str, dict]) -> None:
+    """Radar plus hydrophones: a radar contact on the bearing of an engine is very likely a boat.
+
+    An engine on the bearing of a known AIS vessel (`ais_match`) vouches only for a radar
+    contact near that vessel, so busy traffic doesn't vouch for every log on the same line.
+    Silence counts only a little against a contact near a hydrophone, since a boat may sit
+    with its engine off, and not at all against one on a known AIS vessel (moored boats).
+    """
+    by_id = {h["id"]: h for h in HYDROPHONES}
+    engines: dict[int, list[tuple[dict, float, tuple | None]]] = defaultdict(list)
+    for r in rows:
+        if r["kind"] != "hydrophone" or not r["boat"]:
+            continue
+        h, match = by_id[r["sensor"]], None
+        for vid, path in ais_paths.items():
+            at = path.get(r["t"])
+            if at and angle_diff(range_bearing(h, *at)[1], r["bearing_deg"]) < HEARD_WITHIN_DEG:
+                r["ais_match"], match = vid, at
+                break
+        engines[r["t"]].append((h, r["bearing_deg"], match))
+    for r in rows:
+        if r["kind"] != "radar":
+            continue
+        heard = any(
+            angle_diff(range_bearing(h, r["lon"], r["lat"])[1], b) < HEARD_WITHIN_DEG
+            and (at is None or math.hypot(*offset_m(r["lon"], r["lat"], *at)) < SAME_BOAT_M)
+            for h, b, at in engines[r["t"]]
+        )
+        near = any(range_bearing(h, r["lon"], r["lat"])[0] < NEAR_HYDROPHONE_M for h in HYDROPHONES)
+        on_ais = any(
+            (at := path.get(r["t"]))
+            and math.hypot(*offset_m(r["lon"], r["lat"], *at)) < SAME_BOAT_M
+            for path in ais_paths.values()
+        )
+        near = near and not on_ais
+        p = min(0.99, max(0.01, r["confidence"] if r["boat"] else 1 - r["confidence"]))
+        score = math.log(p / (1 - p)) + (2.5 if heard else -0.8 if near else 0)
+        pf = 1 / (1 + math.exp(-score))
+        r.update(heard=heard, fused_boat=pf >= 0.5, fused_confidence=round(max(pf, 1 - pf), 2))
 
 
 def true_path(start: int, legs: list[tuple]) -> dict[int, tuple[float, float]]:
@@ -249,6 +405,16 @@ def row(
 def generate(objects: list[dict], rng: random.Random) -> list[dict]:
     rows = []
     paths = {o["id"]: o.get("path") or true_path(o["start"], o["legs"]) for o in objects}
+    for t in range(T0, T_END + 1, SWEEP):
+        engines = []
+        for o in objects:
+            pos = paths[o["id"]].get(t)
+            if o["kind"] == "boat" and pos is not None:
+                speed, _ = speed_course(paths[o["id"]].get(t - SWEEP, pos), pos, SWEEP)
+                if speed >= ENGINE_ON_KN:
+                    engines.append((o, *pos, speed))
+        for h in HYDROPHONES:
+            rows += listen(h, t, engines, rng)
     for sensor in SENSORS:
         for t in range(T0, T_END + 1, sensor["every_s"]):
             for o in objects:
@@ -273,7 +439,9 @@ def generate(objects: list[dict], rng: random.Random) -> list[dict]:
                 truth = {"id": "clutter", "kind": "clutter"}
                 size, speed = rng.uniform(0.5, 3), rng.uniform(0, 4)
                 rows.append(row(sensor, t, truth, lon, lat, size, speed, rng.uniform(0, 360), rng))
-    return sorted(rows, key=lambda r: (r["t"], r["sensor"]))
+    rows.sort(key=lambda r: (r["t"], r["sensor"]))
+    fuse(rows, {o["id"]: o["path"] for o in objects if "path" in o})
+    return rows
 
 
 def tracks(rows: list[dict], objects: list[dict]) -> tuple[list[dict], dict[str, dict]]:
@@ -330,18 +498,39 @@ def main(data_path: str, out_dir: str, web_path: str) -> None:
     ], "the only boat without AIS that enters should be noais-1"
     assert sum(t["ais_id"] is not None for t in truth.values()) >= 3, "radar should see AIS boats"
     assert all(v["track"] for v in vessels), "every boat should be in radar range"
-    for s in SENSORS:
+
+    def accuracy(rs: list[dict], key: str = "boat") -> float:
+        return sum(r[key] == (r["truth_kind"] == "boat") for r in rs) / len(rs)
+
+    for s in SENSORS + HYDROPHONES:
         mine = [r for r in rows if r["sensor"] == s["id"]]
-        right = sum(r["boat"] == (r["truth_kind"] == "boat") for r in mine)
-        assert mine and 0.7 < right / len(mine) < 1, f"{s['id']}: expected mostly right, some wrong"
+        acc = accuracy(mine)
+        assert mine and 0.7 < acc, f"{s['id']}: expected mostly right"
+        # Hydrophones may be flawless in a quiet stretch; the others should make some mistakes.
+        assert s["kind"] == "hydrophone" or acc < 1, f"{s['id']}: expected some mistakes"
     assert {r["truth_id"] for r in rows if r["kind"] == "lidar"} >= {"noais-1"}
+    hydro = [r for r in rows if r["kind"] == "hydrophone"]
+    assert {"noais-1", "orca", "cherry-pt-pier"} <= {r["truth_id"] for r in hydro}
+    assert any(r["truth_ais_id"] for r in hydro), "AIS vessels should be heard"
+    stopped = (T0 + 66 * 60, T0 + 155 * 60)  # noais-1 sits with its engine off
+    assert not any(r["truth_id"] == "noais-1" and stopped[0] < r["t"] < stopped[1] for r in hydro)
+    near = [
+        r
+        for r in rows
+        if r["kind"] == "radar"
+        and any(range_bearing(h, r["lon"], r["lat"])[0] < NEAR_HYDROPHONE_M for h in HYDROPHONES)
+    ]
+    radar_acc, fused_acc = accuracy(near), accuracy(near, "fused_boat")
+    assert fused_acc > radar_acc, f"fusion should help near hydrophones: {radar_acc} -> {fused_acc}"
+    print(f"radar near hydrophones: {radar_acc:.1%} right alone, {fused_acc:.1%} with them")
 
     out = Path(out_dir)
     with open(out / "detections.csv", "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=list(rows[0]))
+        writer = csv.DictWriter(f, fieldnames=COLUMNS, restval="")
         writer.writeheader()
         writer.writerows(rows)
-    out_data = {"sources": [SOURCE], "sensors": SENSORS, "vessels": vessels, "truth": truth}
+    sensors = SENSORS + HYDROPHONES
+    out_data = {"sources": [SOURCE], "sensors": sensors, "vessels": vessels, "truth": truth}
     (out / "sensors.json").write_text(json.dumps(out_data, indent=2) + "\n", encoding="utf-8")
 
     # The app's copy carries what a real system would know: no ground truth, no sensor noise.
@@ -349,7 +538,9 @@ def main(data_path: str, out_dir: str, web_path: str) -> None:
         "sources": [SOURCE],
         "sensors": [{k: s[k] for k in s if k in COVERAGE_KEYS} for s in SENSORS],
         "vessels": vessels,
-        "detections": [{k: r[k] for k in DETECTION_KEYS} for r in rows],
+        "detections": [
+            {k: r[k] for k in DETECTION_KEYS} for r in rows if r["kind"] != "hydrophone"
+        ],
     }
     Path(web_path).write_text(json.dumps(web_data, separators=(",", ":")), encoding="utf-8")
     n_ais = sum(t["ais_id"] is not None for t in truth.values())

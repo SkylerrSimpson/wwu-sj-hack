@@ -40,7 +40,7 @@ class Position:
     cog_deg: float | None
     heading_deg: int | None
     nav_status: int | None
-    high_accuracy: bool
+    high_accuracy: bool | None
     transmit_second: int | None
     heard_at: float
     name: str | None
@@ -73,7 +73,7 @@ class VesselRecord(TypedDict):
     cog_deg: float | None
     heading_deg: int | None
     nav_status: int | None
-    high_accuracy: bool
+    high_accuracy: bool | None
     transmit_second: int | None
     heard_at: str
     received_at: str
@@ -100,6 +100,55 @@ def type_word(code: int | None) -> str:
     if code in TYPE_WORDS:
         return TYPE_WORDS[code]
     return DECADE_WORDS.get(code // 10, "Other") if 10 <= code <= 99 else "Other"
+
+
+def is_identified(type_code: int | None) -> bool:
+    # An unknown type stays private: it may be a pleasure boat whose type hasn't arrived.
+    return type_code is not None and type_word(type_code) not in PRIVATE
+
+
+def vessel_id(salt: bytes, key: str) -> str:
+    # A keyed hash, so a client can follow a boat without learning its MMSI, which looks up
+    # its owner.
+    return f"v-{hmac.new(salt, key.encode(), hashlib.sha256).hexdigest()[:16]}"
+
+
+def public_record(
+    record_id: str,
+    position: Position,
+    identity: Static | None,
+    received_at: float,
+    flags: list[str],
+    source: str,
+) -> VesselRecord:
+    type_code = identity.type_code if identity else None
+    length_m = identity.length_m if identity else None
+    kind = type_word(type_code)
+    identified = is_identified(type_code)
+    label = "Unidentified vessel" if type_code is None else kind
+    generic = f"{label}, {length_m} m" if length_m else label
+    name = identity.name if identity else None
+    return {
+        "id": record_id,
+        "mmsi": position.mmsi if identified else None,
+        "name": (name or generic) if identified else generic,
+        "type": kind,
+        "length_m": length_m,
+        "callsign": identity.callsign if identified and identity else None,
+        "vessel_class": position.vessel_class,
+        "lat": position.lat,
+        "lon": position.lon,
+        "sog_kn": position.sog_kn,
+        "cog_deg": position.cog_deg,
+        "heading_deg": position.heading_deg,
+        "nav_status": position.nav_status,
+        "high_accuracy": position.high_accuracy,
+        "transmit_second": position.transmit_second,
+        "heard_at": iso(position.heard_at),
+        "received_at": iso(received_at),
+        "flags": flags,
+        "source": source,
+    }
 
 
 def iso(timestamp: float) -> str:
@@ -164,10 +213,8 @@ class Fleet:
     def _vessel(self, mmsi: int, heard_at: float) -> Vessel:
         vessel = self._vessels.get(mmsi)
         if vessel is None:
-            # A keyed hash, so a client can follow a boat without learning its MMSI, which
-            # looks up its owner. The id doesn't change when the vessel's type arrives.
-            digest = hmac.new(self._salt, str(mmsi).encode(), hashlib.sha256).hexdigest()
-            vessel = Vessel(id=f"v-{digest[:16]}", last_heard=heard_at)
+            # The id doesn't change when the vessel's type arrives.
+            vessel = Vessel(id=vessel_id(self._salt, str(mmsi)), last_heard=heard_at)
             self._vessels[mmsi] = vessel
         return vessel
 
@@ -211,29 +258,14 @@ class Fleet:
     def _record(self, vessel: Vessel) -> VesselRecord:
         position = vessel.position
         assert position is not None
-        kind = type_word(vessel.type_code)
-        # An unknown type stays private: it may be a pleasure boat whose type hasn't arrived.
-        identified = vessel.type_code is not None and kind not in PRIVATE
-        label = "Unidentified vessel" if vessel.type_code is None else kind
-        generic = f"{label}, {vessel.length_m} m" if vessel.length_m else label
-        return {
-            "id": vessel.id,
-            "mmsi": position.mmsi if identified else None,
-            "name": (vessel.name or generic) if identified else generic,
-            "type": kind,
-            "length_m": vessel.length_m,
-            "callsign": vessel.callsign if identified else None,
-            "vessel_class": position.vessel_class,
-            "lat": position.lat,
-            "lon": position.lon,
-            "sog_kn": position.sog_kn,
-            "cog_deg": position.cog_deg,
-            "heading_deg": position.heading_deg,
-            "nav_status": position.nav_status,
-            "high_accuracy": position.high_accuracy,
-            "transmit_second": position.transmit_second,
-            "heard_at": iso(position.heard_at),
-            "received_at": iso(vessel.received_at),
-            "flags": vessel.flags,
-            "source": self._source,
-        }
+        identity = Static(
+            position.mmsi,
+            position.heard_at,
+            vessel.name,
+            vessel.callsign,
+            vessel.type_code,
+            vessel.length_m,
+        )
+        return public_record(
+            vessel.id, position, identity, vessel.received_at, vessel.flags, self._source
+        )

@@ -1,0 +1,17 @@
+[Unit]
+Description=Back up the Lummi streamer database
+
+[Service]
+Type=oneshot
+User=lummi
+Group=lummi
+StateDirectory=lummi-streamer
+StateDirectoryMode=0750
+UMask=0027
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ExecStartPre=/usr/bin/mkdir -p /var/lib/lummi-streamer/backups
+ExecStart=/bin/sh -c 'sqlite3 /var/lib/lummi-streamer/ais.db ".backup /var/lib/lummi-streamer/backups/ais-$(date -u +%%F).db"'
+ExecStartPost=/bin/sh -c 'ls -1t /var/lib/lummi-streamer/backups/ais-*.db | tail -n +8 | xargs -r rm --'

@@ -2,13 +2,14 @@ import asyncio
 import json
 import time
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 from typing import Any
 
 from aiohttp import ClientResponse
 from aiohttp.test_utils import TestClient, TestServer
 
 from streamer.config import Box, Config
-from streamer.fleet import Position
+from streamer.fleet import Position, Static, iso
 from streamer.health import Health
 from streamer.server import Broadcaster, Service, build
 
@@ -273,3 +274,134 @@ def test_a_feed_that_crashes_is_restarted() -> None:
             assert service.health.counts["feed_crashes"] == 1
 
     asyncio.run(main())
+
+
+def identified(mmsi: int = 368000001, heard_at: float = T0) -> Static:
+    return Static(mmsi, heard_at, "TEST SHIP", "WXY", 60, 30)
+
+
+def with_archive(tmp_path: Path, scenario: Scenario) -> None:
+    with_client(scenario, db_path=str(tmp_path / "ais.db"))
+
+
+def test_history_without_an_archive_says_so() -> None:
+    async def scenario(client: Any, _service: Service) -> None:
+        for path in ["/v1/history", "/v1/track?mmsi=1", "/v1/activity", "/v1/coverage"]:
+            assert (await client.get(path)).status == 503, path
+
+    with_client(scenario)
+
+
+def test_reports_reach_the_archive_and_come_back_as_a_frame(tmp_path: Path) -> None:
+    async def scenario(client: Any, service: Service) -> None:
+        now = time.time()
+        service.ingest(identified(heard_at=now), now)
+        service.ingest(position(heard_at=now), now)
+        assert service.recorder is not None
+        service.recorder.flush()
+        response = await client.get("/v1/history", params={"at": iso(now + 1), "window_s": "60"})
+        assert response.status == 200
+        assert response.headers["Access-Control-Allow-Origin"] == "*"
+        body = await response.json()
+        assert body["at"] == iso(now + 1)
+        assert body["covered"] is True
+        assert "coverage" in body
+        [vessel] = body["vessels"]
+        assert vessel["name"] == "TEST SHIP"
+        health = await (await client.get("/healthz")).json()
+        assert health["archive"]["written"] == 1
+
+    with_archive(tmp_path, scenario)
+
+
+def test_a_report_too_late_for_the_live_map_is_still_archived(tmp_path: Path) -> None:
+    async def scenario(client: Any, service: Service) -> None:
+        now = time.time()
+        service.ingest(position(heard_at=now), now)
+        service.ingest(position(heard_at=now - 300), now)
+        assert service.health.counts["stale"] == 1
+        assert service.recorder is not None
+        service.recorder.flush()
+        assert service.recorder.summary()["written"] == 2
+
+    with_archive(tmp_path, scenario)
+
+
+def test_a_duplicate_and_a_report_from_the_future_are_not_archived(tmp_path: Path) -> None:
+    async def scenario(client: Any, service: Service) -> None:
+        now = time.time()
+        service.ingest(position(heard_at=now), now)
+        service.ingest(position(heard_at=now + 1), now)
+        service.ingest(position(mmsi=368000002, heard_at=now + 9000), now)
+        assert service.recorder is not None
+        service.recorder.flush()
+        assert service.recorder.summary()["written"] == 1
+
+    with_archive(tmp_path, scenario)
+
+
+def test_a_restart_refills_the_live_map_with_identities(tmp_path: Path) -> None:
+    now = time.time()
+
+    async def first(_client: Any, service: Service) -> None:
+        service.ingest(identified(heard_at=now - 120), now - 120)
+        service.ingest(position(heard_at=now - 60), now - 60)
+
+    async def second(client: Any, service: Service) -> None:
+        [vessel] = (await (await client.get("/v1/vessels")).json())["vessels"]
+        assert vessel["name"] == "TEST SHIP"
+        assert vessel["mmsi"] == 368000001
+        assert service.health.counts["position"] == 0
+
+    with_archive(tmp_path, first)
+    with_archive(tmp_path, second)
+
+
+def test_track_activity_and_coverage_endpoints(tmp_path: Path) -> None:
+    async def scenario(client: Any, service: Service) -> None:
+        now = time.time()
+        service.ingest(identified(heard_at=now - 10), now - 10)
+        service.ingest(position(heard_at=now - 10), now - 10)
+        service.ingest(position(mmsi=338000002, heard_at=now - 10), now - 10)
+        assert service.recorder is not None
+        service.recorder.flush()
+        window = {"from": iso(now - 3600), "to": iso(now + 60)}
+
+        track = await client.get("/v1/track", params={"mmsi": "368000001", **window})
+        assert track.status == 200
+        assert len((await track.json())["points"]) == 1
+        hidden = await client.get("/v1/track", params={"mmsi": "338000002", **window})
+        assert hidden.status == 404
+
+        activity = await client.get("/v1/activity", params=window)
+        assert sum(r["reports"] for r in (await activity.json())["bins"]) == 2
+
+        coverage = await (await client.get("/v1/coverage", params=window)).json()
+        assert [s["source"] for s in coverage["segments"]] == ["aisstream"]
+        assert coverage["gaps"]
+
+    with_archive(tmp_path, scenario)
+
+
+def test_history_inputs_are_validated(tmp_path: Path) -> None:
+    async def scenario(client: Any, _service: Service) -> None:
+        good = {"from": "2026-11-07T00:00:00Z", "to": "2026-11-07T01:00:00Z"}
+        for path, params in [
+            ("/v1/history", {"at": "yesterday"}),
+            ("/v1/history", {"at": "2026-11-07T00:00:00"}),
+            ("/v1/history", {"window_s": "0"}),
+            ("/v1/history", {"window_s": "abc"}),
+            ("/v1/history", {"window_s": "999999"}),
+            ("/v1/track", good),
+            ("/v1/track", {"mmsi": "abc", **good}),
+            ("/v1/track", {"mmsi": "1", "from": good["to"], "to": good["from"]}),
+            ("/v1/track", {"mmsi": "1", "max_points": "0", **good}),
+            ("/v1/track", {"mmsi": "1", "max_points": "999999", **good}),
+            ("/v1/track", {"mmsi": "1", "from": "2020-01-01T00:00:00Z", "to": good["to"]}),
+            ("/v1/activity", {"bin_s": "60", **good}),
+            ("/v1/activity", {"from": good["to"], "to": good["from"]}),
+            ("/v1/coverage", {"from": "nope"}),
+        ]:
+            assert (await client.get(path, params=params)).status == 400, (path, params)
+
+    with_archive(tmp_path, scenario)

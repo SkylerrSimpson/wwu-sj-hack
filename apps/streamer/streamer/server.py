@@ -1,19 +1,22 @@
-"""The HTTP API: a snapshot, a live stream, and health. Reads only; no client can change anything."""
+"""The HTTP API: live state, the archive, and health. Reads only; no client can change anything."""
 
 import asyncio
 import json
 import logging
 import math
 import secrets
+import sqlite3
 import time
 from collections import Counter, deque
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any
 
 from aiohttp import web
 
 from streamer import aisstream
+from streamer.archive import Reader, Recorder
 from streamer.config import Config
 from streamer.fleet import Fleet, Position, Report, iso
 from streamer.health import Health
@@ -28,7 +31,45 @@ COVERAGE = (
     "No vessel heard does not mean no vessel present."
 )
 
+# Each bounds one request's work, so a client can't turn a query into a full-table read.
+MAX_WINDOW_S = 24 * 3600.0
+MAX_TRACK_S = 31 * 24 * 3600.0
+MAX_TRACK_POINTS = 10_000
+# Keeps slow history queries from taking every thread while the live stream carries on.
+MAX_HISTORY_QUERIES = 4
+
 Feed = Callable[[Callable[[Report], None], Health], Awaitable[None]]
+
+
+def time_param(request: web.Request, name: str, default: float) -> float:
+    text = request.query.get(name)
+    if text is None:
+        return default
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        raise web.HTTPBadRequest(text=f"{name} must be an ISO 8601 time") from None
+    if parsed.tzinfo is None:
+        raise web.HTTPBadRequest(text=f"{name} must include a time zone, such as Z")
+    return parsed.timestamp()
+
+
+def time_range(request: web.Request, default_s: float) -> tuple[float, float]:
+    end = time_param(request, "to", time.time())
+    start = time_param(request, "from", end - default_s)
+    if start >= end:
+        raise web.HTTPBadRequest(text="from must be before to")
+    return start, end
+
+
+def number_param(request: web.Request, name: str, default: float, high: float) -> float:
+    try:
+        value = float(request.query.get(name, default))
+    except ValueError:
+        raise web.HTTPBadRequest(text=f"{name} must be a number") from None
+    if not math.isfinite(value) or not 0 < value <= high:
+        raise web.HTTPBadRequest(text=f"{name} must be above zero and at most {high:g}")
+    return value
 
 
 @dataclass(eq=False, slots=True)
@@ -93,11 +134,17 @@ class Service:
     fleet: Fleet
     health: Health
     broadcaster: Broadcaster
+    recorder: Recorder | None = None
     tasks: list[asyncio.Task[None]] = field(default_factory=list)
 
     def ingest(self, report: Report, received_at: float) -> None:
         record, outcome = self.fleet.apply(report, received_at)
         self.health.counts[outcome] += 1
+        # A late report is too old for the live map but is still history. A duplicate or a clock
+        # from the future isn't.
+        if self.recorder is not None and outcome not in ("duplicate", "future_time"):
+            flags = record["flags"] if record is not None else []
+            self.recorder.add(report, received_at, flags, aisstream.SOURCE)
         if outcome == "position" and isinstance(report, Position):
             self.health.latencies.append(received_at - report.heard_at)
         if record is not None:
@@ -130,6 +177,82 @@ def build(
         broadcaster=Broadcaster(config.event_buffer, config.client_queue),
     )
     broadcaster = service.broadcaster
+    reader: Reader | None = None
+    if config.db_path:
+        service.recorder = Recorder(config.db_path)
+        reader = Reader(config.db_path, config.id_salt)
+        for report, received_at in reader.latest(since=time.time() - FORGET_AFTER_S):
+            service.fleet.apply(report, received_at)
+        log.info("restored %d vessels from the archive", len(service.fleet))
+    else:
+        log.warning("STREAMER_DB is not set: nothing is being recorded")
+    history_slots = asyncio.Semaphore(MAX_HISTORY_QUERIES)
+
+    async def query(call: Callable[..., Any], *args: Any) -> Any:
+        try:
+            async with history_slots:
+                return await asyncio.to_thread(call, *args)
+        except sqlite3.OperationalError as error:
+            log.warning("a history query failed: %s", error)
+            raise web.HTTPServiceUnavailable(
+                text="history is busy, try again", headers={"Retry-After": "5"}
+            ) from None
+
+    def archive() -> Reader:
+        if reader is None:
+            raise web.HTTPServiceUnavailable(text="this server keeps no archive")
+        return reader
+
+    def compressed(payload: Any) -> web.Response:
+        response = web.json_response(payload)
+        response.enable_compression()
+        return response
+
+    async def history(request: web.Request) -> web.Response:
+        store = archive()
+        at = time_param(request, "at", time.time())
+        window_s = number_param(request, "window_s", 900.0, MAX_WINDOW_S)
+        then = await query(store.frame, at, window_s)
+        covered = await query(store.covered, at)
+        return compressed(
+            {
+                "at": iso(at),
+                "window_s": window_s,
+                "covered": covered,
+                "coverage": COVERAGE,
+                "vessels": then,
+            }
+        )
+
+    async def track(request: web.Request) -> web.Response:
+        store = archive()
+        try:
+            mmsi = int(request.query.get("mmsi", ""))
+        except ValueError:
+            raise web.HTTPBadRequest(text="mmsi must be a number") from None
+        start, end = time_range(request, 24 * 3600.0)
+        if end - start > MAX_TRACK_S:
+            raise web.HTTPBadRequest(text="a track can cover at most 31 days")
+        max_points = number_param(request, "max_points", 2000, MAX_TRACK_POINTS)
+        found = await query(store.track, mmsi, start, end, int(max(max_points, 1)))
+        if found is None:
+            raise web.HTTPNotFound(text="no track for this vessel")
+        return compressed(found)
+
+    async def activity(request: web.Request) -> web.Response:
+        store = archive()
+        start, end = time_range(request, 7 * 24 * 3600.0)
+        bin_text = request.query.get("bin_s", "3600")
+        if bin_text not in ("3600", "86400"):
+            raise web.HTTPBadRequest(text="bin_s must be 3600 or 86400")
+        bins = await query(store.activity, start, end, int(bin_text))
+        return compressed({"from": iso(start), "to": iso(end), "bins": bins})
+
+    async def coverage(request: web.Request) -> web.Response:
+        store = archive()
+        start, end = time_range(request, 365 * 24 * 3600.0)
+        found = await query(store.coverage, start, end)
+        return compressed({"from": iso(start), "to": iso(end), **found})
 
     async def default_feed(on_report: Callable[[Report], None], health: Health) -> None:
         await aisstream.run(aisstream.URL, config.api_key, config.box, on_report, health)
@@ -184,6 +307,7 @@ def build(
                 **service.health.summary(now),
                 "vessels": len(service.fleet),
                 "clients": len(broadcaster.subscribers),
+                "archive": service.recorder.summary() if service.recorder else None,
             }
         )
 
@@ -233,6 +357,8 @@ def build(
         response.headers["Access-Control-Allow-Origin"] = config.cors_origin
 
     async def start(_app: web.Application) -> None:
+        if service.recorder is not None:
+            service.recorder.start()
         service.tasks.extend([asyncio.create_task(supervise_feed()), asyncio.create_task(watch())])
 
     async def close_clients(_app: web.Application) -> None:
@@ -242,10 +368,16 @@ def build(
         for task in service.tasks:
             task.cancel()
         await asyncio.gather(*service.tasks, return_exceptions=True)
+        if service.recorder is not None:
+            await asyncio.to_thread(service.recorder.stop)
 
     app = web.Application()
     app.router.add_get("/v1/vessels", vessels)
     app.router.add_get("/v1/stream", stream)
+    app.router.add_get("/v1/history", history)
+    app.router.add_get("/v1/track", track)
+    app.router.add_get("/v1/activity", activity)
+    app.router.add_get("/v1/coverage", coverage)
     app.router.add_get("/healthz", health)
     app.on_response_prepare.append(allow_cross_origin)
     app.on_startup.append(start)

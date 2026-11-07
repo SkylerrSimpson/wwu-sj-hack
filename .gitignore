@@ -17,3 +17,7 @@ data/lummifiles/
 data/Lummi_Reservation_Boundary.kml
 data/TugsAtCherryPointIndustries_20251209112623.jpg
 data/example_kml_usage.txt
+# The archive holds private boats' real MMSIs.
+*.db
+*.db-wal
+*.db-shm

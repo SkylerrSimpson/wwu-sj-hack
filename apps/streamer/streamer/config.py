@@ -33,6 +33,7 @@ class Config:
     max_clients: int = 200
     event_buffer: int = 1000
     client_queue: int = 256
+    db_path: str | None = None
 
 
 def parse_box(text: str) -> Box:
@@ -69,4 +70,5 @@ def load(env: Mapping[str, str]) -> Config:
         host=env.get("STREAMER_HOST", "127.0.0.1"),
         port=parse_port(env.get("STREAMER_PORT", "8787")),
         cors_origin=env.get("STREAMER_CORS_ORIGIN", "*"),
+        db_path=env.get("STREAMER_DB") or None,
     )

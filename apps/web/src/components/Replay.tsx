@@ -1,10 +1,10 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import AlertPanel from "@/components/AlertPanel";
-import ListsPanel from "@/components/ListsPanel";
+import ConfigPanel from "@/components/ConfigPanel";
 import {
   Table,
   TableBody,
@@ -14,8 +14,16 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { Ship } from "@/components/ShipMap";
-import { STATUS_WORD, type ShipStatus } from "@/lib/status";
+import {
+  DEFAULT_CONFIG,
+  labelOf,
+  listsFor,
+  parseConfig,
+  serializeConfig,
+  type Config,
+} from "@/lib/config";
 import type { Data, Vessel } from "@/lib/data";
+import { STATUS_WORD, type ShipStatus } from "@/lib/status";
 import {
   inLummiWaters,
   newEntries,
@@ -23,14 +31,13 @@ import {
   summary,
   vesselStatus,
   type Entry,
-  type Lists,
 } from "@/lib/vessel";
 
 const ShipMap = dynamic(() => import("./ShipMap"), { ssr: false });
 
 const SPEEDS = [60, 600, 3600];
 const TICK_MS = 250;
-const STORAGE_KEY = "vesselLists";
+const STORAGE_KEY = "vesselConfig";
 
 const clock = new Intl.DateTimeFormat("en-US", {
   timeZone: "America/Los_Angeles",
@@ -42,35 +49,24 @@ const clock = new Intl.DateTimeFormat("en-US", {
   timeZoneName: "short",
 });
 
-function loadLists(): Lists | null {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const parsed: unknown = JSON.parse(raw);
-    if (typeof parsed !== "object" || parsed === null) return null;
-    const { priority, watch } = parsed as { priority?: unknown; watch?: unknown };
-    const ids = (x: unknown) =>
-      new Set(Array.isArray(x) ? x.filter((v) => typeof v === "string") : []);
-    return { priority: ids(priority), watch: ids(watch) };
-  } catch {
-    return null;
-  }
+// The tracks are 4 MB, so the page fetches the static file instead of embedding it in the HTML.
+export default function Replay() {
+  const [data, setData] = useState<Data | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    fetch("/data.json")
+      .then((r) => (r.ok ? (r.json() as Promise<Data>) : Promise.reject(new Error(r.statusText))))
+      .then(setData)
+      .catch(() => setFailed(true));
+  }, []);
+  if (failed) return <p role="alert">The vessel positions could not be loaded. Reload the page.</p>;
+  if (!data) return <p aria-live="polite">Loading five days of vessel positions...</p>;
+  return <ReplayView data={data} />;
 }
 
-function saveLists(lists: Lists) {
-  try {
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({ priority: [...lists.priority], watch: [...lists.watch] }),
-    );
-  } catch {
-    // Storage can be unavailable; the lists then live for the session only.
-  }
-}
-
-// Owns the clock, the user's lists, the selection and the entries. Every tick asks lib/vessel
-// where each vessel is and which non-priority vessels crossed in since the last tick.
-export default function Replay({ data }: { data: Data }) {
+// Owns the clock, the configuration, the selection and the entries. Every tick asks lib/vessel
+// where each vessel is and which non-approved vessels crossed in since the last tick.
+function ReplayView({ data }: { data: Data }) {
   const start = Date.parse(data.window.start) / 1000;
   const end = Date.parse(data.window.end) / 1000;
   const demoStart = data.vessels.find((v) => v.id === "demo")?.track[0]?.[0];
@@ -78,20 +74,31 @@ export default function Replay({ data }: { data: Data }) {
   const [t, setT] = useState(start);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(600);
-  const [lists, setLists] = useState<Lists>({ priority: new Set(), watch: new Set() });
+  const [config, setConfig] = useState<Config>(DEFAULT_CONFIG);
   const [selected, setSelected] = useState<string | null>(null);
   const [entries, setEntries] = useState<Entry[]>([]);
   const prevT = useRef(start);
   const loaded = useRef(false);
 
   useEffect(() => {
-    const saved = loadLists();
-    if (saved) setLists(saved);
+    try {
+      const saved = parseConfig(localStorage.getItem(STORAGE_KEY) ?? "");
+      if (saved) setConfig(saved);
+    } catch {
+      // Storage can be unavailable; the configuration then lives for the session only.
+    }
     loaded.current = true;
   }, []);
   useEffect(() => {
-    if (loaded.current) saveLists(lists);
-  }, [lists]);
+    if (!loaded.current) return;
+    try {
+      localStorage.setItem(STORAGE_KEY, serializeConfig(config));
+    } catch {
+      // Same as above.
+    }
+  }, [config]);
+
+  const lists = useMemo(() => listsFor(data.vessels, config), [data.vessels, config]);
 
   useEffect(() => {
     if (!playing) return;
@@ -118,9 +125,8 @@ export default function Replay({ data }: { data: Data }) {
     const s = vesselStatus(v, lists);
     return s === "unlisted" && suspicious.has(v.id) ? "suspicious" : s;
   };
-  const rows = summary(
-    inLummiWaters(data.vessels, data.boundary.ring, t, lists),
-    (v) => v.fleet ?? v.type,
+  const rows = summary(inLummiWaters(data.vessels, data.boundary.ring, t, lists), (v) =>
+    labelOf(v, config),
   );
   const ships: Ship[] = data.vessels.flatMap((v) => {
     const p = positionAt(v.track, t);
@@ -209,12 +215,12 @@ export default function Replay({ data }: { data: Data }) {
             </TableBody>
           </Table>
         </section>
-        <ListsPanel
+        <ConfigPanel
           vessels={data.vessels.map((v) => ({ id: v.id, name: v.name }))}
-          lists={lists}
+          config={config}
           selected={selected}
           onSelect={setSelected}
-          onChange={setLists}
+          onChange={setConfig}
         />
         <AlertPanel entries={entries} />
       </div>

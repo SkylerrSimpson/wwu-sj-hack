@@ -6,7 +6,7 @@ export default function Home() {
     <>
       <main className="mx-auto w-full max-w-5xl flex-1 p-4">
         <h1 className="text-2xl font-semibold">Lummi Vessel Tracker</h1>
-        <Replay data={data} />
+        <Replay />
       </main>
       <footer className="mx-auto w-full max-w-5xl px-4 pb-4 text-sm text-neutral-600">
         Data:{" "}

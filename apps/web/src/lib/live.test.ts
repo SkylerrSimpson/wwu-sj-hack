@@ -10,6 +10,7 @@ const record: LiveRecord = {
   lat: 48.73,
   lon: -122.67,
   heard_at: "2026-11-07T19:48:11.907Z",
+  heading: null,
 };
 
 test("parseRecord accepts the streamer's record and rejects one missing a position", () => {
@@ -20,6 +21,18 @@ test("parseRecord accepts the streamer's record and rejects one missing a positi
   });
   expect(parseRecord({ ...record, lat: "48" })).toBeNull();
   expect(parseRecord("nonsense")).toBeNull();
+});
+
+test("parseRecord takes the AIS heading, else the course while moving, else none", () => {
+  const raw = { ...record, heading: undefined };
+  expect(parseRecord({ ...raw, heading_deg: 217, cog_deg: 220, sog_kn: 9.5 })?.heading).toBe(217);
+  expect(parseRecord({ ...raw, heading_deg: null, cog_deg: 220, sog_kn: 9.5 })?.heading).toBe(220);
+  // Course is noise for a boat barely moving.
+  expect(parseRecord({ ...raw, heading_deg: null, cog_deg: 220, sog_kn: 0.3 })?.heading).toBeNull();
+  expect(
+    parseRecord({ ...raw, heading_deg: 400, cog_deg: null, sog_kn: null })?.heading,
+  ).toBeNull();
+  expect(parseRecord(raw)?.heading).toBeNull();
 });
 
 test("toVessel makes a one-point track in unix seconds, unapproved and with no fleet", () => {

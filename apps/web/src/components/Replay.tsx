@@ -21,6 +21,7 @@ import {
 import type { Coverage, Path, Ship } from "@/components/ShipMap";
 import { labelOf, listsFor, moveTo } from "@/lib/config";
 import type { Data, Vessel } from "@/lib/data";
+import { directionAt } from "@/lib/heading";
 import { merge, parseRecord } from "@/lib/live";
 import { RADAR_RANGE_M, RADAR_SITES } from "@/lib/radar";
 import { callsignText } from "@/lib/privacy";
@@ -113,6 +114,8 @@ function ReplayView({ data }: { data: Data }) {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [mode, setMode] = useState<Mode>("replay");
   const [live, setLive] = useState<Map<string, Vessel>>(new Map());
+  // Each live vessel's latest heading; the replay works its direction out from the track.
+  const [headings, setHeadings] = useState<Map<string, number | null>>(new Map());
   const [feed, setFeed] = useState<Feed | null>(null);
   const [heard, setHeard] = useState<Heard>(null);
   const [now, setNow] = useState(() => Date.now() / 1000);
@@ -131,21 +134,19 @@ function ReplayView({ data }: { data: Data }) {
     };
     es.addEventListener("snapshot", (e) => {
       const p = parse(e) as { feed?: Feed; vessels?: unknown[] } | null;
+      const records = (p?.vessels ?? []).flatMap((x) => parseRecord(x) ?? []);
       // A snapshot after a reconnect merges into what is held, so tracks survive the gap.
-      setLive((held) => {
-        let next = held;
-        for (const x of p?.vessels ?? []) {
-          const r = parseRecord(x);
-          if (r) next = merge(next, r);
-        }
-        return next;
-      });
+      setLive((held) => records.reduce(merge, held));
+      setHeadings((held) => new Map([...held, ...records.map((r) => [r.id, r.heading] as const)]));
       if (p?.feed) setFeed(p.feed);
       setHeard(Date.now() / 1000);
     });
     es.addEventListener("vessel", (e) => {
       const r = parseRecord(parse(e));
-      if (r) setLive((m) => merge(m, r));
+      if (r) {
+        setLive((m) => merge(m, r));
+        setHeadings((h) => new Map(h).set(r.id, r.heading));
+      }
       setHeard(Date.now() / 1000);
     });
     es.addEventListener("status", (e) => {
@@ -233,6 +234,7 @@ function ReplayView({ data }: { data: Data }) {
             status: statusOf(v),
             lon: p[0],
             lat: p[1],
+            heading: (mode === "live" ? headings.get(v.id) : null) ?? directionAt(v.track, at),
           },
         ]
       : [];

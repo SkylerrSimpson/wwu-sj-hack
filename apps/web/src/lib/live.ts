@@ -10,6 +10,8 @@ export type LiveRecord = {
   lat: number;
   lon: number;
   heard_at: string;
+  // Degrees from north: the AIS heading, else the course while moving; null when neither.
+  heading: number | null;
 };
 
 // About twelve hours at one fix a minute; older fixes fall off the front.
@@ -26,6 +28,8 @@ export function parseRecord(x: unknown): LiveRecord | null {
   const lon = num("lon");
   const heard = str("heard_at");
   if (!id || lat === null || lon === null || !heard || Number.isNaN(Date.parse(heard))) return null;
+  const degrees = (x: number | null) => (x !== null && x >= 0 && x < 360 ? x : null);
+  const moving = (num("sog_kn") ?? 0) >= 1;
   return {
     id,
     name: str("name") ?? "Unidentified vessel",
@@ -35,6 +39,7 @@ export function parseRecord(x: unknown): LiveRecord | null {
     lat,
     lon,
     heard_at: heard,
+    heading: degrees(num("heading_deg")) ?? (moving ? degrees(num("cog_deg")) : null),
   };
 }
 

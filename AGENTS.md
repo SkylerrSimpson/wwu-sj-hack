@@ -7,7 +7,7 @@ A prototype for the Lummi Nation, built in one day: Saturday Nov 7 2026, four pe
 - `docs/SPEC.md`: the problem, the one user, the demo script, the safeguards. The demo script plus the safeguards table is the scope; everything else waits.
 - `docs/DECISIONS.md`: one line per decision made so far.
 - `docs/HACKATHON.md`: the day's schedule and gates.
-- `docs/prep/README.md`: the morning's research, and which note each person's issue needs.
+- `docs/prep/`: the morning's research (data sources, the AIS check, the audit, talking points).
 - Standards, binding on every code change: @agents/standards.md
 - Skills and the procedure to follow without them: @agents/skills.md
 
@@ -30,15 +30,15 @@ Every file has one owner, and only the owner commits it. Work inside your own fi
 
 `data/schema.json` is the contract between the data side and the web side; `make check` enforces it. Pages import `@/lib/data`; components receive props and never import it.
 
-A schema change is an issue: `gh issue create -l schema -t "schema: <field>" -b "<why, and the JSON Schema snippet>"`. The other owner comments `agreed`. Then two landings, each `make check` green: for an added field, the data side first (`schema.json`, `build.py` and its test, the regenerated `data.json`), then `data.ts`; for a removed field, `data.ts` first.
+A data-format change is agreed out loud between Willow and Skyler, then lands in two steps, each `make check` green: for an added field, the data side first (`schema.json`, `build.py` and its test, the regenerated `data.json`), then `data.ts`; for a removed field, `data.ts` first.
 
 ## Loop
 
-1. Work the issue number in your prompt; given none, ask for one. Its acceptance criteria are the finish line.
+1. Work the issue number in your prompt; given none, ask for one. Its "Done when" list is the finish line.
 2. Core logic gets a failing test first, then the code that passes it; the folder decides what is core logic (Where code goes, in the standards). A component is built, then clicked by a human.
 3. `make check` green. Formatting is fixed by `make fmt`; type, lint and test failures are fixed in the code. The hook runs on every commit.
 4. A commit message is one imperative line ending in `#<issue>`, with a body only when the why is not in the diff; the message ends there. Land on `main` with `git fetch origin && git rebase origin/main && make check && git push origin HEAD:main`; a rejected push means run that line again. An agent in a worktree runs `make setup` once and works on branch `slice/<issue>`. A conflict in `docs/DECISIONS.md` or `data/NOTES.md` keeps both sides' lines.
 5. End the turn by naming the commit. A human opens the live URL (the `Live:` line in `README.md`) and walks the demo script.
-6. Close the issue: `gh issue close <n> -c "<one line on what changed>"`.
+6. Skyler closes finished issues at each gate; nobody else does issue admin.
 
 Three red `make check` runs in a row on one slice, or thirty minutes by the clock, means the slice is too big: close it with `split into #a #b` and open the two, or cut it. Fifteen minutes stuck means ask a teammate.

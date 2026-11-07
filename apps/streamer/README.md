@@ -51,6 +51,7 @@ Set these in `.env`.
 | `STREAMER_PUBLISH_PORT` | `8787`                        | The port on this machine.                                                       |
 | `STREAMER_DATA`         | `./data`                      | The folder that holds everything the service keeps.                             |
 | `STREAMER_ID_SALT`      | from `id_salt.txt`            | Overrides the file. Rarely needed.                                              |
+| `STREAMER_TRUST_PROXY`  | off                           | `1` behind a proxy that sets `X-Forwarded-For`, so limits apply per visitor.    |
 
 To run without Docker, for development: `uv sync`, then `AIS_API_KEY=... STREAMER_DB=data/ais.db uv run python -m streamer`. Without `STREAMER_DB`, nothing is recorded.
 
@@ -77,6 +78,10 @@ The address is `https://lummi.<tailnet>.ts.net`, shown in the Tailscale admin co
 Anyone who can push to `main` changes what runs on the host, inside unprivileged containers apart from the updater, which drives Docker. To approve each deploy instead, run `sh $C stop updater` and run `sh repo/apps/streamer/deploy/update.sh` by hand.
 
 With nginx or another proxy instead of Funnel, turn proxy buffering off for `/v1/stream` (`proxy_buffering off;`), or events arrive in lumps.
+
+## Limits
+
+The API is public, so each client gets an allowance: a burst of 120 requests, then 5 a second, where an archive query (`history`, `track`, `reports`, `density`, `activity`) counts as 4. Past that it answers 429 with `Retry-After`. Each client may hold 30 live streams, and the server 200 in all. `/healthz` counts refusals as `rate_limited`. A browser showing the site never comes near this; a script looping on the API does.
 
 ## API
 

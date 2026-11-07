@@ -35,6 +35,12 @@ class Config:
     event_buffer: int = 1000
     client_queue: int = 256
     db_path: str | None = None
+    # Each client's requests: a burst, then a steady rate. A history query costs several.
+    rate_burst: float = 120.0
+    rate_per_s: float = 5.0
+    streams_per_client: int = 30
+    # Only behind a proxy that sets X-Forwarded-For itself, or any client could pick its own key.
+    trust_proxy: bool = False
 
 
 def parse_box(text: str) -> Box:
@@ -86,4 +92,5 @@ def load(env: Mapping[str, str]) -> Config:
         port=parse_port(env.get("STREAMER_PORT", "8787")),
         cors_origin=env.get("STREAMER_CORS_ORIGIN", "*"),
         db_path=db_path,
+        trust_proxy=env.get("STREAMER_TRUST_PROXY") == "1",
     )

@@ -486,3 +486,44 @@ def test_reports_catalog_and_density_endpoints(tmp_path: Path) -> None:
         assert [c["vessels"] for c in density["cells"]] == [1]
 
     with_archive(tmp_path, scenario)
+
+
+def test_a_client_over_its_allowance_is_told_to_wait() -> None:
+    async def scenario(client: Any, _service: Service) -> None:
+        assert (await client.get("/healthz")).status == 200
+        assert (await client.get("/healthz")).status == 200
+        refused = await client.get("/healthz")
+        assert refused.status == 429
+        assert int(refused.headers["Retry-After"]) >= 1
+        assert refused.headers["Access-Control-Allow-Origin"] == "*"
+        other = await client.get("/healthz", headers={"X-Forwarded-For": "203.0.113.9"})
+        assert other.status == 429
+
+    with_client(scenario, rate_burst=2, rate_per_s=0.01)
+
+
+def test_behind_a_trusted_proxy_each_forwarded_address_has_its_own_allowance() -> None:
+    async def scenario(client: Any, _service: Service) -> None:
+        first = {"X-Forwarded-For": "203.0.113.9"}
+        assert (await client.get("/healthz", headers=first)).status == 200
+        assert (await client.get("/healthz", headers=first)).status == 429
+        second = {"X-Forwarded-For": "198.51.100.7"}
+        assert (await client.get("/healthz", headers=second)).status == 200
+
+    with_client(scenario, rate_burst=1, rate_per_s=0.01, trust_proxy=True)
+
+
+def test_one_client_cannot_hold_every_stream() -> None:
+    async def scenario(client: Any, _service: Service) -> None:
+        mine = [await client.get("/v1/stream") for _ in range(2)]
+        assert (await client.get("/v1/stream")).status == 429
+        theirs = await client.get("/v1/stream", headers={"X-Forwarded-For": "198.51.100.7"})
+        assert theirs.status == 200
+        mine[0].close()
+        await asyncio.sleep(0.1)
+        again = await client.get("/v1/stream")
+        assert again.status == 200
+        for stream in [*mine[1:], theirs, again]:
+            stream.close()
+
+    with_client(scenario, streams_per_client=2, max_clients=10, trust_proxy=True)

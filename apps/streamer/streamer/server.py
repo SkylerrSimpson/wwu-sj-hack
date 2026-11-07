@@ -20,6 +20,7 @@ from streamer.archive import Reader, Recorder, parse_cursor
 from streamer.config import Box, Config, parse_box
 from streamer.fleet import TYPES, Fleet, Position, Report, iso
 from streamer.health import Health
+from streamer.limits import Limiter, client_of
 
 log = logging.getLogger(__name__)
 
@@ -40,6 +41,10 @@ MAX_REPORTS = 50_000
 MIN_YEAR, MAX_YEAR = 2000, 2100
 # Keeps slow history queries from taking every thread while the live stream carries on.
 MAX_HISTORY_QUERIES = 4
+# What a request to each archive route takes from its client's allowance; anything else takes 1.
+HISTORY_COST = 4.0
+CLIENT = web.RequestKey("client", str)
+HISTORY_ROUTES = {"/v1/history", "/v1/track", "/v1/reports", "/v1/density", "/v1/activity"}
 
 Feed = Callable[[Callable[[Report], None], Health], Awaitable[None]]
 
@@ -227,6 +232,24 @@ def build(
     else:
         log.warning("STREAMER_DB is not set: nothing is being recorded")
     history_slots = asyncio.Semaphore(MAX_HISTORY_QUERIES)
+    limiter = Limiter(config.rate_burst, config.rate_per_s)
+    streams_by_client: Counter[str] = Counter()
+
+    @web.middleware
+    async def limit(request: web.Request, handler: Any) -> web.StreamResponse:
+        client = client_of(
+            request.remote, request.headers.get("X-Forwarded-For"), config.trust_proxy
+        )
+        cost = HISTORY_COST if request.path in HISTORY_ROUTES else 1.0
+        wait = limiter.take(client, cost, time.monotonic())
+        if wait:
+            service.health.counts["rate_limited"] += 1
+            raise web.HTTPTooManyRequests(
+                text="too many requests, slow down", headers={"Retry-After": str(math.ceil(wait))}
+            )
+        request[CLIENT] = client
+        response: web.StreamResponse = await handler(request)
+        return response
 
     async def query(call: Callable[..., Any], *args: Any) -> Any:
         try:
@@ -401,6 +424,13 @@ def build(
     async def stream(request: web.Request) -> web.StreamResponse:
         if len(broadcaster.subscribers) >= config.max_clients:
             raise web.HTTPServiceUnavailable(text="too many clients", headers={"Retry-After": "30"})
+        # Without this, one client holding every stream would lock everyone else out.
+        client = request[CLIENT]
+        if streams_by_client[client] >= config.streams_per_client:
+            raise web.HTTPTooManyRequests(
+                text="too many streams from one client", headers={"Retry-After": "30"}
+            )
+        streams_by_client[client] += 1
         task = asyncio.current_task()
         assert task is not None
 
@@ -438,6 +468,9 @@ def build(
             pass
         finally:
             broadcaster.unsubscribe(subscriber)
+            streams_by_client[client] -= 1
+            if not streams_by_client[client]:
+                del streams_by_client[client]
         return response
 
     async def allow_cross_origin(_request: web.Request, response: web.StreamResponse) -> None:
@@ -458,7 +491,7 @@ def build(
         if service.recorder is not None:
             await asyncio.to_thread(service.recorder.stop)
 
-    app = web.Application()
+    app = web.Application(middlewares=[limit])
     app.router.add_get("/v1/vessels", vessels)
     app.router.add_get("/v1/stream", stream)
     app.router.add_get("/v1/history", history)

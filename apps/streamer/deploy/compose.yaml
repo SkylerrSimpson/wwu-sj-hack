@@ -13,6 +13,9 @@ services:
     extends:
       file: ../compose.yaml
       service: streamer
+    environment:
+      # Funnel's proxy sets X-Forwarded-For to the visitor's address, so limits apply per visitor.
+      STREAMER_TRUST_PROXY: "1"
 
   # Its own Tailscale device, so the host's Tailscale, ports and firewall stay untouched.
   funnel:

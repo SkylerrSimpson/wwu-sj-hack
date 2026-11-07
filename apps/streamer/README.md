@@ -60,6 +60,8 @@ The live site needs public HTTPS, for example Tailscale Funnel or a Cloudflare T
 
 ## API
 
+`API.md` is the front-end guide: every endpoint with real samples, and which call suits which feature.
+
 - `GET /v1/vessels`: every vessel heard, newest first. `?max_age_s=600` limits it to recent ones.
 - `GET /v1/stream`: Server-Sent Events. The first event is a `snapshot`, then a `vessel` event for each update and a `status` event when the feed changes state. A browser `EventSource` reconnects by itself and sends its last event id, so it receives only what it missed, or a new `snapshot` if too much has passed.
 - `GET /healthz`: `live`, `stale` or `down`, plus a count of every message outcome.

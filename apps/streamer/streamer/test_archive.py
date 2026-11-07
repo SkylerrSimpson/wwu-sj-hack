@@ -588,3 +588,28 @@ def test_private_boats_show_no_new_identity_fields(path: Path) -> None:
         None,
     )
     assert "HOME DOCK" not in str(record)
+
+
+def test_paging_through_rows_that_share_a_second_misses_and_repeats_nothing(path: Path) -> None:
+    same_second = [position(T0, mmsi=SHIP + n) for n in range(5)]
+    reader = store(path, *same_second, position(T0 + 1))
+    seen: list[tuple[str, int | None, str]] = []
+    after = None
+    pages = 0
+    while True:
+        page = reader.reports(T0, T0 + 10, 2, after=after)
+        assert page is not None
+        seen += [(r["heard_at"], r["id"], r["source"]) for r in page["reports"]]
+        pages += 1
+        after = page["next"]
+        if after is None:
+            break
+    assert pages == 3
+    assert len(seen) == 6
+    assert len(set(seen)) == 6
+
+
+def test_a_whole_result_has_no_next(path: Path) -> None:
+    page = store(path, position()).reports(T0 - 1, T0 + 1, 10)
+    assert page is not None
+    assert (page["truncated"], page["next"]) == (False, None)

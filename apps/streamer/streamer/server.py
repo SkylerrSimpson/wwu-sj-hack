@@ -16,7 +16,7 @@ from typing import Any
 from aiohttp import web
 
 from streamer import aisstream
-from streamer.archive import Reader, Recorder
+from streamer.archive import Reader, Recorder, parse_cursor
 from streamer.config import Box, Config, parse_box
 from streamer.fleet import TYPES, Fleet, Position, Report, iso
 from streamer.health import Health
@@ -284,6 +284,14 @@ def build(
         if end - start > MAX_REPORTS_S:
             raise web.HTTPBadRequest(text="reports can cover at most 7 days at a time")
         limit = int(number_param(request, "limit", 5000, MAX_REPORTS))
+        after = request.query.get("after")
+        if after is not None:
+            try:
+                parse_cursor(after)
+            except ValueError:
+                raise web.HTTPBadRequest(
+                    text="after must be a next value from /v1/reports"
+                ) from None
         found = await query(
             store.reports,
             start,
@@ -292,6 +300,7 @@ def build(
             box_param(request),
             types_param(request),
             mmsi_param(request),
+            after,
         )
         if found is None:
             raise web.HTTPNotFound(text="no reports can be given for this vessel")

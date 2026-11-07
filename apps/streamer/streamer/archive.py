@@ -465,6 +465,12 @@ def gaps(
     return [*found, (cursor, end)]
 
 
+def parse_cursor(text: str) -> tuple[float, int, str]:
+    """Raises ValueError for anything reports() didn't write."""
+    heard_at, mmsi, source = text.split("~", 2)
+    return float(heard_at), int(mmsi), source
+
+
 def flags_of(row: sqlite3.Row) -> list[str]:
     return row["flags"].split(",") if row["flags"] else []
 
@@ -626,8 +632,12 @@ class Reader:
         box: Box | None = None,
         types: Collection[str] | None = None,
         mmsi: int | None = None,
+        after: str | None = None,
     ) -> dict[str, Any] | None:
-        """Every report in time order. None when mmsi names a private or unidentified vessel."""
+        """Every report in time order. None when mmsi names a private or unidentified vessel.
+
+        `next` is set when the limit cut the page short: pass it back as `after` for the rest.
+        """
         if mmsi is not None and not self._identified(mmsi):
             return None
         db = self.connect()
@@ -652,13 +662,20 @@ class Reader:
             if box is not None:
                 where.append("lat BETWEEN ? AND ? AND lon BETWEEN ? AND ?")
                 args += [box.south, box.north, box.west, box.east]
+            if after is not None:
+                # The whole key, because NOAA puts many rows on the same second and a page
+                # boundary inside them must neither repeat nor skip one.
+                where.append("(heard_at, mmsi, source) > (?, ?, ?)")
+                args += list(parse_cursor(after))
             rows = db.execute(
-                f"SELECT * FROM reports {index} WHERE {' AND '.join(where)} ORDER BY heard_at",
+                f"SELECT * FROM reports {index} WHERE {' AND '.join(where)} "
+                "ORDER BY heard_at, mmsi, source",
                 args,
             )
             records: list[VesselRecord] = []
             truncated = False
             ids: dict[str, str] = {}
+            last: sqlite3.Row | None = None
             for row in rows:
                 identity_now = identities.get(row["mmsi"])
                 kind = type_word(identity_now.type_code if identity_now else None)
@@ -668,9 +685,13 @@ class Reader:
                     truncated = True
                     break
                 records.append(self._record(row, identity_now, ids))
+                last = row
         finally:
             db.close()
-        return {"reports": records, "truncated": truncated}
+        cursor = None
+        if truncated and last is not None:
+            cursor = f"{last['heard_at']!r}~{last['mmsi']}~{last['source']}"
+        return {"reports": records, "truncated": truncated, "next": cursor}
 
     def catalog(
         self, start: float, end: float, types: Collection[str] | None = None

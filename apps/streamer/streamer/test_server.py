@@ -431,6 +431,8 @@ def test_history_inputs_are_validated(tmp_path: Path) -> None:
             ("/v1/reports", {"box": "1,2,3", **good}),
             ("/v1/reports", {"type": "Spaceship", **good}),
             ("/v1/reports", {"mmsi": "abc", **good}),
+            ("/v1/reports", {"after": "nonsense", **good}),
+            ("/v1/reports", {"after": "1.0~x~live", **good}),
             ("/v1/reports", {"mmsi": "9" * 30, **good}),
             ("/v1/track", {"mmsi": "9" * 30, **good}),
             ("/v1/track", {"mmsi": "-1", **good}),
@@ -468,6 +470,12 @@ def test_reports_catalog_and_density_endpoints(tmp_path: Path) -> None:
         assert body["truncated"] is False
         hidden = await client.get("/v1/reports", params={"mmsi": "338000002", **window})
         assert hidden.status == 404
+        first = await (await client.get("/v1/reports", params={"limit": "1", **window})).json()
+        assert first["next"] is not None
+        rest = await client.get(
+            "/v1/reports", params={"limit": "1", "after": first["next"], **window}
+        )
+        assert (await rest.json())["reports"] != first["reports"]
 
         catalog = await (await client.get("/v1/catalog", params=window)).json()
         assert [v["mmsi"] for v in catalog["vessels"]] == [368000001]

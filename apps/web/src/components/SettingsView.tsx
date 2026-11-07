@@ -23,12 +23,7 @@ export default function SettingsView({ vessels }: { vessels: { id: string; name:
       </p>
       <main className="mx-auto w-full max-w-3xl flex-1 space-y-4 p-4">
         <header className="flex items-start justify-between gap-4">
-          <div className="space-y-1">
-            <h1 className="text-2xl font-semibold">Settings</h1>
-            <p className="text-sm text-muted-foreground">
-              Everything here is saved in this browser.
-            </p>
-          </div>
+          <h1 className="text-2xl font-semibold">Settings</h1>
           <Button variant="outline" render={<Link href="/map" />}>
             Back to map
           </Button>
@@ -48,12 +43,8 @@ export default function SettingsView({ vessels }: { vessels: { id: string; name:
                 autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.org"
               />
             </div>
-            <p className="text-sm text-muted-foreground">
-              The demo sender only delivers to the Resend account owner&apos;s inbox.
-            </p>
           </CardContent>
         </Card>
 

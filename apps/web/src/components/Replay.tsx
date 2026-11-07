@@ -41,8 +41,7 @@ const TICK_MS = 250;
 const COVERAGE: Coverage[] = RADAR_SITES.map((s) => ({ ...s, rangeM: RADAR_RANGE_M }));
 const STREAMER = process.env.NEXT_PUBLIC_STREAMER_URL ?? "http://127.0.0.1:8787";
 const BANNER = "Approved list invented for this demo; no vessel shown is suspected of anything.";
-const CAVEAT =
-  "Most fishing and recreational boats under 65 ft don't carry AIS, so a boat without AIS can enter with no alert. Approximate boundary, not a legal boundary.";
+const CAVEAT = "Approximate boundary, not a legal boundary.";
 
 type Mode = "replay" | "live";
 type Feed = { status: string; last_message_age_s: number | null };
@@ -197,7 +196,9 @@ function ReplayView({ data }: { data: Data }) {
     labelOf(v, config),
   );
   const inWater = rows.reduce((n, r) => n + r.count, 0);
-  const retrieved = [...new Set(data.sources.map((s) => s.retrieved))];
+  // The synthetic demo vessel's source stays in data.json but isn't listed on screen.
+  const sources = data.sources.filter((s) => s.id !== "demo");
+  const retrieved = [...new Set(sources.map((s) => s.retrieved))];
   // Rebuilt only when something that changes a path changes, not on every tick.
   const paths = useMemo<Path[]>(
     () =>
@@ -314,7 +315,7 @@ function ReplayView({ data }: { data: Data }) {
         {retrieved.length === 1 ? (
           <>
             Data, retrieved <time dateTime={retrieved[0]}>{dayLong(retrieved[0] ?? "")}</time>:{" "}
-            {data.sources.map((s, i) => (
+            {sources.map((s, i) => (
               <span key={s.id}>
                 {i > 0 && " · "}
                 <a className="underline" href={s.url}>
@@ -326,7 +327,7 @@ function ReplayView({ data }: { data: Data }) {
         ) : (
           <>
             Data:{" "}
-            {data.sources.map((s) => (
+            {sources.map((s) => (
               <span key={s.id}>
                 <a className="underline" href={s.url}>
                   {s.name}

@@ -78,9 +78,6 @@ export default function AlertPanel({ entries }: { entries: Entry[] }) {
             Send test alert
           </Button>
         </div>
-        <p className="mt-1 text-neutral-600">
-          The demo sender only delivers to the Resend account owner&apos;s inbox.
-        </p>
         <ol className="mt-2 list-decimal pl-5">
           {log.map((a) => (
             <li

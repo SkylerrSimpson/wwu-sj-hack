@@ -33,7 +33,7 @@ export type TopBarProps = {
 };
 
 // Leaflet's own controls sit at z-index 1000, so the chrome goes one above.
-const Z = "z-[1001]";
+const Z = "z-10";
 
 const selectClass =
   "h-7 rounded-lg border border-input bg-transparent px-2 text-[0.8rem] outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";

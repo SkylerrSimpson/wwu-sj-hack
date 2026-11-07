@@ -2,7 +2,7 @@
 
 Helps Lummi Nation staff see which vessels are in Lummi waters and get an email when one that is not on the approved list enters. Built in one day at the WWU Social Justice Hackathon, Nov 7 2026, from five recorded days of public AIS ship positions.
 
-How it works, in one breath: public ship positions, then rules that find which vessels are inside the reservation boundary and which just crossed in, then a map that replays the days with an alert panel. The approved list and the patterns that mark known vessels (XWL, WSF, SWN, NKK) are edited in the app. The only alerting vessel in the demo is a labeled synthetic one; no real boat is accused.
+How it works, in one breath: public ship positions, then rules that find which vessels are inside the reservation boundary and which just crossed in, then a map that replays the days with an alert panel. The approved list and the patterns that mark known vessels (seventeen tribal call-sign codes such as XWL for the Lummi Nation, and WSF for the state ferries) are edited in the app. The only alerting vessel in the demo is a labeled synthetic one; no real boat is accused.
 
 Live: https://example.vercel.app
 

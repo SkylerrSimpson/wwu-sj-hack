@@ -17,6 +17,7 @@ export type SidePanelProps = {
   tab?: SidePanelTab;
   onTab?: (t: SidePanelTab) => void;
   collapsed: boolean;
+  footer?: ReactNode;
   onCollapse: (b: boolean) => void;
   className?: string;
 };
@@ -35,74 +36,85 @@ export default function SidePanel({
   onTab,
   collapsed,
   onCollapse,
+  footer,
   className,
 }: SidePanelProps) {
-  if (collapsed)
-    return (
-      <div className={cn("flex w-10 flex-col items-center border-r bg-background py-2", className)}>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                size="icon-sm"
-                variant="ghost"
-                aria-label="Show the column"
-                onClick={() => onCollapse(false)}
-              />
-            }
-          >
-            <PanelLeftOpen />
-          </TooltipTrigger>
-          <TooltipContent side="right">Show the column</TooltipContent>
-        </Tooltip>
-      </div>
-    );
-  return (
-    <Tabs
-      defaultValue="water"
-      value={tab}
-      onValueChange={(v) => onTab?.(v as SidePanelTab)}
-      className={cn("w-80 gap-0 border-r bg-background", className)}
+  // The strip and the column are both always mounted: the alert pane remembers what it has sent.
+  const strip = (
+    <div
+      className={cn(
+        "flex w-10 flex-col items-center border-r bg-background py-2",
+        collapsed ? "" : "hidden",
+        className,
+      )}
     >
-      <div className="flex items-center gap-1 border-b p-2">
-        <TabsList className="w-full">
-          {TABS.map(([key, label]) => (
-            <TabsTrigger key={key} value={key} className="px-1 text-xs">
-              {label}
-              {counts?.[key] !== undefined && (
-                <Badge variant="secondary" className="px-1.5">
-                  {counts[key]}
-                </Badge>
-              )}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                size="icon-sm"
-                variant="ghost"
-                aria-label="Hide the column"
-                onClick={() => onCollapse(true)}
-              />
-            }
-          >
-            <PanelLeftClose />
-          </TooltipTrigger>
-          <TooltipContent side="bottom">Hide the column</TooltipContent>
-        </Tooltip>
-      </div>
-      {TABS.map(([key]) => (
-        <TabsContent
-          key={key}
-          value={key}
-          keepMounted
-          className="min-h-0 flex-1 overflow-y-auto p-3"
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              size="icon-sm"
+              variant="ghost"
+              aria-label="Show the column"
+              onClick={() => onCollapse(false)}
+            />
+          }
         >
-          {panes[key]}
-        </TabsContent>
-      ))}
-    </Tabs>
+          <PanelLeftOpen />
+        </TooltipTrigger>
+        <TooltipContent side="right">Show the column</TooltipContent>
+      </Tooltip>
+    </div>
+  );
+  return (
+    <>
+      {strip}
+      <Tabs
+        defaultValue="water"
+        value={tab}
+        onValueChange={(v) => onTab?.(v as SidePanelTab)}
+        className={cn("w-80 gap-0 border-r bg-background", collapsed ? "hidden" : "", className)}
+      >
+        <div className="flex items-center gap-1 border-b p-2">
+          <TabsList className="w-full">
+            {TABS.map(([key, label]) => (
+              <TabsTrigger key={key} value={key} className="px-1 text-xs">
+                {label}
+                {counts?.[key] !== undefined && (
+                  <Badge variant="secondary" className="px-1.5">
+                    {counts[key]}
+                  </Badge>
+                )}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  size="icon-sm"
+                  variant="ghost"
+                  aria-label="Hide the column"
+                  onClick={() => onCollapse(true)}
+                />
+              }
+            >
+              <PanelLeftClose />
+            </TooltipTrigger>
+            <TooltipContent side="bottom">Hide the column</TooltipContent>
+          </Tooltip>
+        </div>
+        {TABS.map(([key]) => (
+          <TabsContent
+            key={key}
+            value={key}
+            keepMounted
+            className="min-h-0 flex-1 overflow-y-auto p-3"
+          >
+            {panes[key]}
+          </TabsContent>
+        ))}
+        {footer && <div className="border-t p-3">{footer}</div>}
+      </Tabs>
+    </>
   );
 }

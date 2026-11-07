@@ -116,7 +116,7 @@ export default function ConfigPanel({
     <div className="space-y-4">
       <Card size="sm">
         <CardHeader>
-          <CardTitle>Approved name patterns</CardTitle>
+          <CardTitle>Approved patterns</CardTitle>
           <CardAction>
             <Badge variant="secondary">{config.patterns.length}</Badge>
           </CardAction>

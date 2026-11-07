@@ -296,7 +296,11 @@ function ReplayView({ data }: { data: Data }) {
           placed by eye. Radar would show boats that don&apos;t broadcast AIS, but not who they are.
         </p>
       )}
-      <Separator />
+    </div>
+  );
+
+  const footer = (
+    <div className="space-y-2">
       <p className="text-xs text-muted-foreground">{CAVEAT}</p>
       <p className="text-xs text-muted-foreground">
         Data:{" "}
@@ -315,7 +319,7 @@ function ReplayView({ data }: { data: Data }) {
   const listsPane = (
     <div className="space-y-3 text-sm">
       <dl className="grid grid-cols-[1fr_auto] gap-y-1">
-        <dt className="text-muted-foreground">Approved name patterns</dt>
+        <dt className="text-muted-foreground">Approved patterns</dt>
         <dd className="text-right">{config.patterns.length}</dd>
         <dt className="text-muted-foreground">Approved vessels</dt>
         <dd className="text-right">{config.priority.size}</dd>
@@ -430,15 +434,14 @@ function ReplayView({ data }: { data: Data }) {
         onToggleOverlay={() => setOverlay((o) => !o)}
         banner={BANNER}
       />
-      {overlay && (
-        <SidePanel
-          className="absolute top-[76px] bottom-0 left-0 z-[1050]"
-          panes={{ water, lists: listsPane, alerts: <AlertPanel entries={entries} />, vessel }}
-          counts={{ water: rows.reduce((n, r) => n + r.count, 0), alerts: entries.length }}
-          collapsed={collapsed}
-          onCollapse={setCollapsed}
-        />
-      )}
+      <SidePanel
+        className={`absolute top-[76px] bottom-0 left-0 z-20${overlay ? "" : " hidden"}`}
+        panes={{ water, lists: listsPane, alerts: <AlertPanel entries={entries} />, vessel }}
+        counts={{ water: rows.reduce((n, r) => n + r.count, 0), alerts: entries.length }}
+        collapsed={collapsed}
+        onCollapse={setCollapsed}
+        footer={footer}
+      />
     </div>
   );
 }

@@ -178,14 +178,12 @@ class Service:
     def ingest(self, report: Report, received_at: float) -> None:
         record, outcome = self.fleet.apply(report, received_at)
         self.health.counts[outcome] += 1
-        # A late report is too old for the live map but is still history. A duplicate, a clock
-        # from the future, or a position of unknown age isn't.
-        if (
-            self.recorder is not None
-            and outcome not in ("duplicate", "future_time")
-            and not (isinstance(report, Position) and report.last_known)
-        ):
-            flags = record["flags"] if record is not None else []
+        # Everything heard is history, flagged rather than dropped. Only a position of unknown age
+        # stays out, since it's in the raw message and was never reported as a position.
+        if self.recorder is not None and not (isinstance(report, Position) and report.last_known):
+            flags: list[str] = list(record["flags"]) if record is not None else []
+            if outcome in ("duplicate", "future_time"):
+                flags = [outcome]
             self.recorder.add(report, received_at, flags, aisstream.SOURCE)
         if outcome == "position" and isinstance(report, Position):
             self.health.latencies.append(received_at - report.heard_at)
@@ -327,7 +325,15 @@ def build(
         return compressed({"from": iso(start), "to": iso(end), **found})
 
     async def default_feed(on_report: Callable[[Report], None], health: Health) -> None:
-        await aisstream.run(aisstream.URL, config.api_key, config.box, on_report, health)
+        recorder = service.recorder
+
+        def on_raw(raw: str | bytes) -> None:
+            if recorder is not None:
+                recorder.add_raw(raw, time.time(), aisstream.SOURCE)
+
+        await aisstream.run(
+            aisstream.URL, config.api_key, config.box, on_report, health, on_raw=on_raw
+        )
 
     run_feed = feed or default_feed
 

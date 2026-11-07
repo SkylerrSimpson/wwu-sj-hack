@@ -336,7 +336,7 @@ def test_a_report_too_late_for_the_live_map_is_still_archived(tmp_path: Path) ->
     with_archive(tmp_path, scenario)
 
 
-def test_a_duplicate_and_a_report_from_the_future_are_not_archived(tmp_path: Path) -> None:
+def test_a_duplicate_and_a_report_from_the_future_are_kept_and_flagged(tmp_path: Path) -> None:
     async def scenario(client: Any, service: Service) -> None:
         now = time.time()
         service.ingest(position(heard_at=now), now)
@@ -344,7 +344,12 @@ def test_a_duplicate_and_a_report_from_the_future_are_not_archived(tmp_path: Pat
         service.ingest(position(mmsi=368000002, heard_at=now + 9000), now)
         assert service.recorder is not None
         service.recorder.flush()
-        assert service.recorder.summary()["written"] == 1
+        assert service.recorder.summary()["written"] == 3
+        found = await client.get(
+            "/v1/reports", params={"from": iso(now - 60), "to": iso(now + 10_000)}
+        )
+        flags = [r["flags"] for r in (await found.json())["reports"]]
+        assert flags == [[], ["duplicate"], ["future_time"]]
 
     with_archive(tmp_path, scenario)
 

@@ -13,7 +13,7 @@ from typing import Any, Literal
 import aiohttp
 
 from streamer.config import Box
-from streamer.fleet import Position, Report, Static
+from streamer.fleet import Position, Report, Static, below
 from streamer.health import Health
 
 log = logging.getLogger(__name__)
@@ -83,8 +83,8 @@ def length_of(dimension: dict[str, int]) -> int | None:
     return (dimension["A"] + dimension["B"]) or None
 
 
-def below(value: float, limit: float) -> float | None:
-    return value if value < limit else None
+def width_of(dimension: dict[str, int]) -> int | None:
+    return int(dimension["C"]) + int(dimension["D"]) or None
 
 
 def parse_position(kind: str, body: dict[str, Any], meta: dict[str, Any], heard: float) -> Position:
@@ -128,6 +128,7 @@ def parse_static(kind: str, body: dict[str, Any], mmsi: int, heard: float) -> St
             callsign=clean(part_b["CallSign"]) if has_b else None,
             type_code=(int(part_b["ShipType"]) or None) if has_b else None,
             length_m=length_of(part_b["Dimension"]) if has_b else None,
+            width_m=width_of(part_b["Dimension"]) if has_b else None,
         )
     return Static(
         mmsi=mmsi,
@@ -136,6 +137,10 @@ def parse_static(kind: str, body: dict[str, Any], mmsi: int, heard: float) -> St
         callsign=clean(body.get("CallSign", "")),
         type_code=int(body["Type"]) or None,
         length_m=length_of(body["Dimension"]),
+        imo=int(body.get("ImoNumber") or 0) or None,
+        width_m=width_of(body["Dimension"]),
+        draft_m=float(body.get("MaximumStaticDraught") or 0) or None,
+        destination=clean(str(body.get("Destination", ""))),
     )
 
 
@@ -201,10 +206,21 @@ def backoff(attempt: int, rate_limited: bool = False, rng: random.Random = RNG) 
 
 
 def handle_message(
-    raw: str | bytes, box: Box, on_report: Callable[[Report], None], health: Health
+    raw: str | bytes,
+    box: Box,
+    on_report: Callable[[Report], None],
+    health: Health,
+    on_raw: Callable[[str | bytes], None] | None = None,
 ) -> None:
     health.heard(time.time())
     health.counts["messages"] += 1
+    # Before parsing, so a message this code rejects is still on record exactly as it came.
+    if on_raw is not None:
+        try:
+            on_raw(raw)
+        except Exception:
+            health.counts["handler_errors"] += 1
+            log.exception("keeping one raw message failed")
     try:
         reports = parse(raw)
     except Rejected as rejected:
@@ -227,6 +243,7 @@ async def read_until_broken(
     on_report: Callable[[Report], None],
     health: Health,
     silence_after: float,
+    on_raw: Callable[[str | bytes], None] | None = None,
 ) -> None:
     while True:
         try:
@@ -235,7 +252,7 @@ async def read_until_broken(
             raise FeedError(f"silent for {silence_after:g} s") from None
         if message.type not in (aiohttp.WSMsgType.TEXT, aiohttp.WSMsgType.BINARY):
             raise FeedError(f"connection closed, code {ws.close_code}")
-        handle_message(message.data, box, on_report, health)
+        handle_message(message.data, box, on_report, health, on_raw)
 
 
 async def run(
@@ -247,6 +264,7 @@ async def run(
     *,
     silence_after: float = SILENCE_AFTER_S,
     retry_delay: Callable[[int, bool], float] = backoff,
+    on_raw: Callable[[str | bytes], None] | None = None,
 ) -> None:
     """Holds one subscription for as long as the process lives."""
     attempt = 0
@@ -270,7 +288,7 @@ async def run(
                         health.counts["reconnects"] += 1
                     connected_before = True
                     log.info("feed connected")
-                    await read_until_broken(ws, box, on_report, health, silence_after)
+                    await read_until_broken(ws, box, on_report, health, silence_after, on_raw)
             except (aiohttp.ClientError, OSError, FeedError) as error:
                 rate_limited = (
                     isinstance(error, aiohttp.WSServerHandshakeError) and error.status == 429

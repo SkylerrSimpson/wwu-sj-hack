@@ -18,6 +18,7 @@ from collections.abc import Iterator
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import UTC, date, datetime, timedelta
 from itertools import batched
+from math import isfinite
 from pathlib import Path
 from typing import Literal, cast
 from urllib.error import URLError
@@ -25,7 +26,6 @@ from urllib.request import urlopen
 
 import zstandard
 
-from streamer.aisstream import below
 from streamer.archive import Archive, Entry
 from streamer.config import Box, parse_box
 from streamer.fleet import Position, Static
@@ -41,51 +41,61 @@ TIMEOUT_S = 120
 ATTEMPTS = 3
 
 
-def number(text: str) -> float | None:
-    return float(text) if text else None
+def number(text: str | None) -> float | None:
+    try:
+        value = float(text or "")
+    except ValueError:
+        return None
+    return value if isfinite(value) else None
 
 
-def whole(text: str) -> int | None:
-    return int(float(text)) if text else None
+def whole(text: str | None) -> int | None:
+    value = number(text)
+    return None if value is None else int(value)
 
 
 def parse_row(row: dict[str, str]) -> tuple[Position, Static] | None:
-    """None for a row with no usable identity, place, time or transceiver."""
+    """Values go in as NOAA published them. A row is refused only when nothing can place it: no
+    vessel, time or position. One unreadable field becomes null and keeps the rest of the row."""
+    mmsi = whole(row.get("mmsi"))
+    lat, lon = number(row.get("latitude")), number(row.get("longitude"))
     try:
-        mmsi = int(row["mmsi"])
-        lat, lon = float(row["latitude"]), float(row["longitude"])
         heard_at = datetime.fromisoformat(row["base_date_time"]).replace(tzinfo=UTC).timestamp()
-        sog, cog = number(row["sog"]), number(row["cog"])
-        heading, status = whole(row["heading"]), whole(row["status"])
-        type_code, length = whole(row["vessel_type"]), whole(row["length"])
-        kind = row["transceiver"]
-    except (ValueError, KeyError, OverflowError):
+    except (KeyError, ValueError):
         return None
-    if not 0 < mmsi < 2**31:
+    if mmsi is None or lat is None or lon is None or not 0 < mmsi < 2**31:
         return None
-    if not (-90 <= lat <= 90 and -180 <= lon <= 180) or kind not in ("A", "B"):
+    if not (-90 <= lat <= 90 and -180 <= lon <= 180):
         return None
+    kind = row.get("transceiver")
     position = Position(
         mmsi=mmsi,
-        vessel_class=cast(Literal["A", "B"], kind),
+        vessel_class=cast(Literal["A", "B"], kind) if kind in ("A", "B") else None,
         lat=lat,
         lon=lon,
-        sog_kn=None if sog is None else below(sog, 102.2),
-        cog_deg=None if cog is None else below(cog, 360.0),
-        heading_deg=None if heading is None or heading >= 360 else heading,
-        nav_status=None if status is None or status == 15 else status,
+        sog_kn=number(row.get("sog")),
+        cog_deg=number(row.get("cog")),
+        heading_deg=whole(row.get("heading")),
+        nav_status=whole(row.get("status")),
         high_accuracy=None,
         transmit_second=None,
         heard_at=heard_at,
         name=None,
     )
+    imo_digits = "".join(c for c in row.get("imo", "") if c.isdigit())
     static = Static(
         mmsi,
         heard_at,
-        row["vessel_name"] or None,
-        row["call_sign"] or None,
-        type_code or None,
-        length or None,
+        row.get("vessel_name") or None,
+        row.get("call_sign") or None,
+        # Zero means "not available", and a type of "Other" would count as identified.
+        whole(row.get("vessel_type")) or None,
+        whole(row.get("length")) or None,
+        int(imo_digits) if imo_digits else None,
+        whole(row.get("width")) or None,
+        number(row.get("draft")) or None,
+        None,
+        whole(row.get("cargo")) or None,
     )
     return position, static
 

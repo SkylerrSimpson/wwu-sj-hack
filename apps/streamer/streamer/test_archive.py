@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from streamer.archive import Archive, Entry, Reader, Recorder, gaps
+from streamer.archive import Archive, Entry, Raw, Reader, Recorder, gaps
 from streamer.config import Box
 from streamer.fleet import Fleet, Position, Static, iso
 
@@ -538,3 +538,53 @@ def test_stopping_retries_when_the_file_is_briefly_busy(
     recorder.stop()
     assert len(calls) == 2
     assert len(Reader(path, SALT).frame(T0, 30)) == 1
+
+
+def test_raw_messages_are_kept_exactly_and_count_as_listening(path: Path) -> None:
+    recorder = Recorder(path)
+    recorder.add_raw('{"odd": "message"}', T0, "live")
+    recorder.add_raw(b"not even json \xff", T0 + 1, "live")
+    recorder.flush()
+    recorder.close()
+    rows = sqlite3.connect(path).execute("SELECT payload, source FROM raw_messages").fetchall()
+    assert rows[0] == ('{"odd": "message"}', "live")
+    assert rows[1][0].startswith("not even json")
+    assert Reader(path, SALT).covered(T0)
+
+
+def test_a_raw_message_written_with_reports_rolls_back_with_them(path: Path) -> None:
+    archive = Archive(path)
+    bad = replace(position(T0 + 1), report=replace(BASE, heard_at=T0 + 1, lat=None))  # type: ignore[arg-type]
+    with pytest.raises(sqlite3.IntegrityError):
+        archive.write([Raw("x", T0, "live"), bad])
+    archive.close()
+    assert sqlite3.connect(path).execute("SELECT COUNT(*) FROM raw_messages").fetchone() == (0,)
+
+
+def test_a_new_identity_field_merges_and_records_its_changes(path: Path) -> None:
+    first = identity(heard_at=T0)
+    deeper = Static(SHIP, T0 + 60, None, None, None, None, draft_m=8.5, imo=9876543)
+    deepest = Static(SHIP, T0 + 120, None, None, None, None, draft_m=9.5)
+    reader = store(path, first, Entry(deeper, T0, (), "live"), Entry(deepest, T0, (), "live"))
+    drafts = (
+        sqlite3.connect(path).execute("SELECT draft_m FROM identities ORDER BY heard_at").fetchall()
+    )
+    assert [row[0] for row in drafts] == [None, 8.5, 9.5]
+    archive = Archive(path)
+    archive.write([position(T0 + 120)])
+    archive.close()
+    [record] = reader.frame(T0 + 120, 30)
+    assert (record["draft_m"], record["imo"], record["name"]) == (9.5, 9876543, "TEST SHIP")
+
+
+def test_private_boats_show_no_new_identity_fields(path: Path) -> None:
+    report = Static(BOAT, T0, "BOAT", "CALL", 37, 10, 123, 3, 1.5, "HOME DOCK", 1)
+    reader = store(path, Entry(report, T0, (), "live"), position(mmsi=BOAT))
+    [record] = reader.frame(T0, 30)
+    assert (record["imo"], record["width_m"], record["draft_m"], record["destination"]) == (
+        None,
+        None,
+        None,
+        None,
+    )
+    assert "HOME DOCK" not in str(record)

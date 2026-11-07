@@ -1,3 +1,4 @@
+import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import date
@@ -49,37 +50,59 @@ def test_a_row_becomes_a_position_and_an_identity() -> None:
         heard_at=T,
         name=None,
     )
-    assert static == Static(368414830, T, "NORTH POINT", "WDQ3225", 90, 25)
+    assert static == Static(368414830, T, "NORTH POINT", "WDQ3225", 90, 25, width_m=10, cargo=90)
 
 
-def test_blank_and_placeholder_values_become_null() -> None:
-    parsed = parse_row(
-        row(sog="102.3", cog="360.0", heading="511", status="15", vessel_type="0", length="0")
-    )
+def test_values_stay_as_published() -> None:
+    parsed = parse_row(row(sog="102.3", cog="360.0", heading="511", status="15"))
     assert parsed is not None
-    position, static = parsed
-    assert (position.sog_kn, position.cog_deg) == (None, None)
-    assert (position.heading_deg, position.nav_status) == (None, None)
-    assert (static.type_code, static.length_m) == (None, None)
-    blank = parse_row(row(sog="", cog="", heading="", status="", vessel_name="", call_sign=""))
-    assert blank is not None
-    assert blank[0].sog_kn is None
-    assert (blank[1].name, blank[1].callsign) == (None, None)
+    position, _ = parsed
+    assert (position.sog_kn, position.cog_deg) == (102.3, 360.0)
+    assert (position.heading_deg, position.nav_status) == (511, 15)
 
 
-def test_a_row_we_cant_trust_is_rejected() -> None:
+def test_every_published_field_is_kept() -> None:
+    parsed = parse_row(row(imo="IMO9876543", draft="8.5", width="20", cargo="70"))
+    assert parsed is not None
+    _, static = parsed
+    assert (static.imo, static.draft_m, static.width_m, static.cargo) == (9876543, 8.5, 20, 70)
+
+
+def test_a_zero_type_means_unknown_so_the_vessel_stays_private() -> None:
+    parsed = parse_row(row(vessel_type="0", length="0"))
+    assert parsed is not None
+    assert (parsed[1].type_code, parsed[1].length_m) == (None, None)
+
+
+def test_one_unreadable_field_doesnt_lose_the_row() -> None:
+    for fine in [row(heading="inf"), row(sog="junk"), row(transceiver=""), row(status="")]:
+        assert parse_row(fine) is not None
+    parsed = parse_row(row(sog="junk", transceiver=""))
+    assert parsed is not None
+    assert (parsed[0].sog_kn, parsed[0].vessel_class) == (None, None)
+
+
+def test_a_row_nothing_can_place_is_refused() -> None:
     for bad in [
         row(latitude="95"),
         row(longitude="-181"),
         row(latitude=""),
         row(mmsi="abc"),
-        row(transceiver=""),
         row(base_date_time="never"),
-        row(heading="inf"),
         row(mmsi="99999999999999999999"),
         {"mmsi": "222", "base_date_time": "2025-11-10T02:00:00", "latitude": "48.7"},
     ]:
         assert parse_row(bad) is None
+
+
+def test_public_records_decode_placeholders_that_the_file_keeps(tmp_path: Path) -> None:
+    db = tmp_path / "ais.db"
+    placeholder = SHIP.replace("0.5,226.8,7,", "102.3,360.0,511,")
+    import_file(write_file(tmp_path, placeholder), db, BOX)
+    [record] = Reader(db, b"s").frame(T + 60, 600)
+    assert (record["sog_kn"], record["cog_deg"], record["heading_deg"]) == (None, None, None)
+    stored = sqlite3.connect(db).execute("SELECT sog_kn, heading_deg FROM reports").fetchone()
+    assert stored == (102.3, 511)
 
 
 def write_file(folder: Path, *rows: str) -> Path:
@@ -176,11 +199,11 @@ def test_a_day_counts_as_imported_only_once_its_coverage_spans_the_day(tmp_path:
     assert not already_imported(db, date(2025, 11, 11))
 
 
-def test_a_short_row_in_a_file_is_counted_not_fatal(tmp_path: Path) -> None:
+def test_a_short_row_in_a_file_keeps_what_it_has(tmp_path: Path) -> None:
     short = "222,2025-11-10 02:00:00,-122.6,48.7\n"
     source = write_file(tmp_path, short, SHIP)
     counts = import_file(source, tmp_path / "ais.db", BOX)
-    assert (counts["stored"], counts["rejected"]) == (1, 1)
+    assert (counts["stored"], counts["rejected"]) == (2, 0)
 
 
 def test_a_stray_row_cant_claim_the_years_before_it(tmp_path: Path) -> None:

@@ -1,12 +1,13 @@
 """Every report we accept, from any source, in one SQLite file: written once, read many times."""
 
+import json
 import logging
 import sqlite3
 import threading
 import time
 from collections import Counter, deque
 from collections.abc import Collection, Iterable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from math import floor
 from pathlib import Path
@@ -18,6 +19,7 @@ from streamer.fleet import (
     Report,
     Static,
     VesselRecord,
+    below,
     is_identified,
     iso,
     public_record,
@@ -43,7 +45,7 @@ CREATE TABLE IF NOT EXISTS reports (
     heard_at REAL NOT NULL,
     source TEXT NOT NULL,
     received_at REAL NOT NULL,
-    vessel_class TEXT NOT NULL,
+    vessel_class TEXT,
     lat REAL NOT NULL,
     lon REAL NOT NULL,
     sog_kn REAL,
@@ -64,8 +66,19 @@ CREATE TABLE IF NOT EXISTS identities (
     callsign TEXT,
     type_code INTEGER,
     length_m INTEGER,
+    imo INTEGER,
+    width_m INTEGER,
+    draft_m REAL,
+    destination TEXT,
+    cargo INTEGER,
     PRIMARY KEY (mmsi, heard_at)
 ) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS raw_messages (
+    received_at REAL NOT NULL,
+    source TEXT NOT NULL,
+    payload TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS raw_by_time ON raw_messages (received_at);
 CREATE TABLE IF NOT EXISTS hourly (
     hour INTEGER NOT NULL,
     source TEXT NOT NULL,
@@ -90,34 +103,25 @@ CREATE TABLE IF NOT EXISTS coverage (
 ) WITHOUT ROWID;
 """
 
-# MAX() makes SQLite return that row's other columns. The named index ties a frame's cost to its
-# window, not to the size of the archive.
+# The inner query needs only the time index, which holds mmsi and source too, so a frame's cost
+# follows its window and not the size of the archive. MAX() makes SQLite return that row's source.
 LATEST_SQL = """
-SELECT r.*, i.heard_at AS identity_at, i.name, i.callsign, i.type_code, i.length_m
+SELECT r.*
 FROM (
-    SELECT mmsi, MAX(heard_at) AS heard_at, source, received_at, vessel_class, lat, lon, sog_kn,
-        cog_deg, heading_deg, nav_status, high_accuracy, transmit_second, flags
+    SELECT mmsi, MAX(heard_at) AS heard_at, source
     FROM reports INDEXED BY reports_by_time
     WHERE heard_at BETWEEN ? AND ?
     GROUP BY mmsi
-) r
-LEFT JOIN identities i ON i.mmsi = r.mmsi
-    AND i.heard_at = (SELECT MAX(heard_at) FROM identities WHERE mmsi = r.mmsi)
+) latest
+CROSS JOIN reports r
+    ON r.mmsi = latest.mmsi AND r.heard_at = latest.heard_at AND r.source = latest.source
 ORDER BY r.heard_at DESC
 """
-
-
-REPORTS_SQL = """
-SELECT r.*, i.heard_at AS identity_at, i.name, i.callsign, i.type_code, i.length_m
-FROM reports r {index}
-LEFT JOIN identities i ON i.mmsi = r.mmsi
-    AND i.heard_at = (SELECT MAX(heard_at) FROM identities WHERE mmsi = r.mmsi)
-WHERE r.heard_at BETWEEN ? AND ? {vessel}
-ORDER BY r.heard_at
-"""
-LATEST_IDENTITIES_SQL = """
-SELECT mmsi, MAX(heard_at) AS identity_at, name, callsign, type_code, length_m
-FROM identities GROUP BY mmsi
+IDENTITY_COLUMNS = (
+    "mmsi, heard_at, name, callsign, type_code, length_m, imo, width_m, draft_m, destination, cargo"
+)
+LATEST_IDENTITIES_SQL = f"""
+SELECT {IDENTITY_COLUMNS}, MAX(heard_at) AS latest FROM identities GROUP BY mmsi
 """
 # Below this, a density cell could point at one private boat's home dock.
 MIN_PRIVATE_IN_CELL = 3
@@ -128,6 +132,15 @@ class Entry:
     report: Report
     received_at: float
     flags: tuple[str, ...]
+    source: str
+
+
+@dataclass(frozen=True, slots=True)
+class Raw:
+    """A provider's message exactly as it came, whatever this code made of it."""
+
+    payload: str
+    received_at: float
     source: str
 
 
@@ -143,16 +156,16 @@ def merged(current: Static | None, report: Static) -> Static:
         a.callsign or b.callsign,
         a.type_code or b.type_code,
         a.length_m or b.length_m,
+        a.imo or b.imo,
+        a.width_m or b.width_m,
+        a.draft_m or b.draft_m,
+        a.destination or b.destination,
+        a.cargo or b.cargo,
     )
 
 
 def same_identity(a: Static, b: Static) -> bool:
-    return (a.name, a.callsign, a.type_code, a.length_m) == (
-        b.name,
-        b.callsign,
-        b.type_code,
-        b.length_m,
-    )
+    return replace(a, heard_at=0) == replace(b, heard_at=0)
 
 
 class Archive:
@@ -168,17 +181,13 @@ class Archive:
         self._db.execute("PRAGMA cache_size=-64000")
         self._db.executescript(SCHEMA)
         self._identities = {
-            row[0]: Static(*row)
-            for row in self._db.execute(
-                "SELECT mmsi, MAX(heard_at), name, callsign, type_code, length_m "
-                "FROM identities GROUP BY mmsi"
-            )
+            row[0]: Static(*row[:-1]) for row in self._db.execute(LATEST_IDENTITIES_SQL)
         }
 
     def close(self) -> None:
         self._db.close()
 
-    def write(self, entries: Iterable[Entry], cover: bool = True) -> int:
+    def write(self, entries: Iterable[Entry | Raw], cover: bool = True) -> int:
         """Stores them in one transaction and returns how many positions were new.
 
         With cover, the time they arrived counts as covered. An import passes False and declares
@@ -193,13 +202,19 @@ class Archive:
         self._db.execute("BEGIN IMMEDIATE")
         try:
             for entry in entries:
-                report = entry.report
                 if cover:
                     low, high = spans.get(entry.source, (entry.received_at, entry.received_at))
                     spans[entry.source] = (
                         min(low, entry.received_at),
                         max(high, entry.received_at),
                     )
+                if isinstance(entry, Raw):
+                    self._db.execute(
+                        "INSERT INTO raw_messages VALUES (?, ?, ?)",
+                        (entry.received_at, entry.source, entry.payload),
+                    )
+                    continue
+                report = entry.report
                 if isinstance(report, Static):
                     self._note_identity(report, entry.source, changed)
                     continue
@@ -276,7 +291,7 @@ class Archive:
         # The cache only saves reads for repeats. Another writer, such as an import, may have
         # changed this vessel, so a write starts from what the file holds now.
         row = self._db.execute(
-            "SELECT mmsi, heard_at, name, callsign, type_code, length_m FROM identities "
+            f"SELECT {IDENTITY_COLUMNS} FROM identities "
             "WHERE mmsi = ? ORDER BY heard_at DESC LIMIT 1",
             (report.mmsi,),
         ).fetchone()
@@ -286,7 +301,7 @@ class Archive:
             changed[report.mmsi] = current
             return
         self._db.execute(
-            "INSERT OR REPLACE INTO identities VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT OR REPLACE INTO identities VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 identity.mmsi,
                 identity.heard_at,
@@ -295,6 +310,11 @@ class Archive:
                 identity.callsign,
                 identity.type_code,
                 identity.length_m,
+                identity.imo,
+                identity.width_m,
+                identity.draft_m,
+                identity.destination,
+                identity.cargo,
             ),
         )
         changed[report.mmsi] = identity
@@ -328,7 +348,7 @@ class Recorder:
         self.archive = Archive(path)
         self._flush_every = flush_every
         self._max_pending = max_pending
-        self._pending: deque[Entry] = deque()
+        self._pending: deque[Entry | Raw] = deque()
         self._stopping = threading.Event()
         self._thread = threading.Thread(target=self._run, name="recorder", daemon=True)
         self._written = 0
@@ -343,8 +363,15 @@ class Recorder:
             return
         self._pending.append(Entry(report, received_at, tuple(flags), source))
 
+    def add_raw(self, payload: str | bytes, received_at: float, source: str) -> None:
+        if len(self._pending) >= self._max_pending:
+            self._dropped += 1
+            return
+        text = payload if isinstance(payload, str) else payload.decode("utf-8", "replace")
+        self._pending.append(Raw(text, received_at, source))
+
     def flush(self) -> None:
-        batch: list[Entry] = []
+        batch: list[Entry | Raw] = []
         while self._pending and len(batch) < BATCH:
             batch.append(self._pending.popleft())
         if not batch:
@@ -370,7 +397,7 @@ class Recorder:
             self._last_error = None
             self._last_write = time.time()
 
-    def _write_one(self, entry: Entry) -> None:
+    def _write_one(self, entry: Entry | Raw) -> None:
         try:
             self._written += self.archive.write([entry])
         except (sqlite3.IntegrityError, sqlite3.ProgrammingError, OverflowError):
@@ -443,33 +470,23 @@ def flags_of(row: sqlite3.Row) -> list[str]:
 
 
 def position_of(row: sqlite3.Row) -> Position:
+    # The file keeps values as sent. These limits decode "not available" for public records:
+    # 102.3 knots, 360 degrees, heading 511, status 15, and seconds 60 to 63.
     accuracy = row["high_accuracy"]
+    heading, status, second = row["heading_deg"], row["nav_status"], row["transmit_second"]
     return Position(
         mmsi=row["mmsi"],
-        vessel_class=cast(Literal["A", "B"], row["vessel_class"]),
+        vessel_class=cast(Literal["A", "B"] | None, row["vessel_class"]),
         lat=row["lat"],
         lon=row["lon"],
-        sog_kn=row["sog_kn"],
-        cog_deg=row["cog_deg"],
-        heading_deg=row["heading_deg"],
-        nav_status=row["nav_status"],
+        sog_kn=below(row["sog_kn"], 102.2),
+        cog_deg=below(row["cog_deg"], 360.0),
+        heading_deg=heading if heading is not None and heading < 360 else None,
+        nav_status=None if status == 15 else status,
         high_accuracy=None if accuracy is None else bool(accuracy),
-        transmit_second=row["transmit_second"],
+        transmit_second=second if second is not None and second < 60 else None,
         heard_at=row["heard_at"],
         name=None,
-    )
-
-
-def identity_of(row: sqlite3.Row) -> Static | None:
-    if row["identity_at"] is None:
-        return None
-    return Static(
-        row["mmsi"],
-        row["identity_at"],
-        row["name"],
-        row["callsign"],
-        row["type_code"],
-        row["length_m"],
     )
 
 
@@ -496,15 +513,34 @@ class Reader:
         finally:
             db.close()
 
+    def _identities(self, db: sqlite3.Connection) -> dict[int, Static]:
+        return {row[0]: Static(*row[:-1]) for row in db.execute(LATEST_IDENTITIES_SQL)}
+
     def frame(self, at: float, window_s: float) -> list[VesselRecord]:
         """Each vessel's latest position in the window ending at `at`, newest first."""
-        return [self._record(row) for row in self._all(LATEST_SQL, at - window_s, at)]
+        db = self.connect()
+        try:
+            identities = self._identities(db)
+            rows = db.execute(LATEST_SQL, (at - window_s, at)).fetchall()
+        finally:
+            db.close()
+        records = [self._record(row, identities.get(row["mmsi"])) for row in rows]
+        # Kept in the file and in /v1/reports, but it means nothing to a vessel's latest place.
+        for record in records:
+            record["flags"] = [flag for flag in record["flags"] if flag != "duplicate"]
+        return records
 
     def latest(self, since: float) -> list[tuple[Report, float]]:
         """What a restart replays into the fleet, identity before position."""
+        db = self.connect()
+        try:
+            identities = self._identities(db)
+            rows = db.execute(LATEST_SQL, (since, time.time())).fetchall()
+        finally:
+            db.close()
         out: list[tuple[Report, float]] = []
-        for row in reversed(self._all(LATEST_SQL, since, time.time() + 86_400)):
-            identity = identity_of(row)
+        for row in reversed(rows):
+            identity = identities.get(row["mmsi"])
             if identity is not None:
                 out.append((identity, row["received_at"]))
             out.append((position_of(row), row["received_at"]))
@@ -548,9 +584,13 @@ class Reader:
                     "heard_at": iso(row["heard_at"]),
                     "lat": row["lat"],
                     "lon": row["lon"],
-                    "sog_kn": row["sog_kn"],
-                    "cog_deg": row["cog_deg"],
-                    "heading_deg": row["heading_deg"],
+                    "sog_kn": below(row["sog_kn"], 102.2),
+                    "cog_deg": below(row["cog_deg"], 360.0),
+                    "heading_deg": (
+                        row["heading_deg"]
+                        if row["heading_deg"] is not None and row["heading_deg"] < 360
+                        else None
+                    ),
                     "flags": flags_of(row),
                     "source": row["source"],
                 }
@@ -590,22 +630,44 @@ class Reader:
         """Every report in time order. None when mmsi names a private or unidentified vessel."""
         if mmsi is not None and not self._identified(mmsi):
             return None
-        index = "" if mmsi is not None else "INDEXED BY reports_by_time"
-        vessel = "" if mmsi is None else "AND r.mmsi = ?"
-        args = (start, end) if mmsi is None else (start, end, mmsi)
-        records: list[VesselRecord] = []
-        truncated = False
         db = self.connect()
         try:
-            for row in db.execute(REPORTS_SQL.format(index=index, vessel=vessel), args):
-                if box is not None and not box.contains(row["lat"], row["lon"]):
-                    continue
-                if types is not None and type_word(row["type_code"]) not in types:
+            identities = self._identities(db)
+            where = ["heard_at BETWEEN ? AND ?"]
+            args: list[Any] = [start, end]
+            index = "INDEXED BY reports_by_time"
+            vessels: list[int] | None = None if mmsi is None else [mmsi]
+            # Reading by vessel skips every other vessel's rows. "Unknown" also means vessels with
+            # no identity at all, which no list can name, so that one has to read them all.
+            if vessels is None and types is not None and "Unknown" not in types:
+                vessels = [
+                    known
+                    for known, identity in identities.items()
+                    if type_word(identity.type_code) in types
+                ]
+            if vessels is not None:
+                index = ""
+                where.append("mmsi IN (SELECT value FROM json_each(?))")
+                args.append(json.dumps(vessels))
+            if box is not None:
+                where.append("lat BETWEEN ? AND ? AND lon BETWEEN ? AND ?")
+                args += [box.south, box.north, box.west, box.east]
+            rows = db.execute(
+                f"SELECT * FROM reports {index} WHERE {' AND '.join(where)} ORDER BY heard_at",
+                args,
+            )
+            records: list[VesselRecord] = []
+            truncated = False
+            ids: dict[str, str] = {}
+            for row in rows:
+                identity_now = identities.get(row["mmsi"])
+                kind = type_word(identity_now.type_code if identity_now else None)
+                if types is not None and kind not in types:
                     continue
                 if len(records) == limit:
                     truncated = True
                     break
-                records.append(self._record(row))
+                records.append(self._record(row, identity_now, ids))
         finally:
             db.close()
         return {"reports": records, "truncated": truncated}
@@ -715,14 +777,18 @@ class Reader:
             "gaps": [{"from": iso(low), "to": iso(high)} for low, high in gaps(spans, start, end)],
         }
 
-    def _record(self, row: sqlite3.Row) -> VesselRecord:
-        identity = identity_of(row)
+    def _record(
+        self, row: sqlite3.Row, identity: Static | None, ids: dict[str, str] | None = None
+    ) -> VesselRecord:
         identified = identity is not None and is_identified(identity.type_code)
         # A private boat's id changes daily, so frames from different days can't be linked.
         day = datetime.fromtimestamp(row["heard_at"], UTC).date().isoformat()
         key = str(row["mmsi"]) if identified else f"{row['mmsi']}:{day}"
+        cache = {} if ids is None else ids
+        if key not in cache:
+            cache[key] = vessel_id(self._salt, key)
         return public_record(
-            vessel_id(self._salt, key),
+            cache[key],
             position_of(row),
             identity,
             row["received_at"],

@@ -242,6 +242,42 @@ def test_a_static_message_without_a_real_position_gives_only_identity() -> None:
         assert isinstance(static, Static)
 
 
+def test_every_message_reaches_the_raw_hook_even_one_that_is_rejected() -> None:
+    raw: list[str | bytes] = []
+    health = Health(counts=Counter())
+    box = Box(48.0, -123.0, 49.0, -122.0)
+    aisstream.handle_message("not json", box, lambda _: None, health, raw.append)
+    good = message("PositionReport", class_a())
+    aisstream.handle_message(good, box, lambda _: None, health, raw.append)
+    assert raw == ["not json", good]
+    assert health.counts["rejected_bad_json"] == 1
+
+
+def test_a_broken_raw_hook_doesnt_lose_the_report() -> None:
+    seen: list[Any] = []
+    health = Health(counts=Counter())
+
+    def broken(_raw: str | bytes) -> None:
+        raise RuntimeError("bug")
+
+    box = Box(48.0, -123.0, 49.0, -122.0)
+    aisstream.handle_message(message("PositionReport", class_a()), box, seen.append, health, broken)
+    assert len(seen) == 1
+    assert health.counts["handler_errors"] == 1
+
+
+def test_ship_static_data_keeps_imo_width_draft_and_destination() -> None:
+    body = {
+        **STATIC_A,
+        "ImoNumber": 9876543,
+        "MaximumStaticDraught": 8.5,
+        "Destination": "CHERRY PT@@",
+        "Dimension": {"A": 100, "B": 20, "C": 10, "D": 12},
+    }
+    s = only_static(message("ShipStaticData", body))
+    assert (s.imo, s.width_m, s.draft_m, s.destination) == (9876543, 22, 8.5, "CHERRY PT")
+
+
 def test_a_real_position_is_never_marked_last_known() -> None:
     assert only_position(message("PositionReport", class_a())).last_known is False
 

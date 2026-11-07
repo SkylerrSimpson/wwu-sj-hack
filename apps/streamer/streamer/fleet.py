@@ -34,7 +34,7 @@ TYPES = {*TYPE_WORDS.values(), *DECADE_WORDS.values(), "Other", "Unknown"}
 @dataclass(frozen=True, slots=True)
 class Position:
     mmsi: int
-    vessel_class: Literal["A", "B"]
+    vessel_class: Literal["A", "B"] | None
     lat: float
     lon: float
     sog_kn: float | None
@@ -57,6 +57,11 @@ class Static:
     callsign: str | None
     type_code: int | None
     length_m: int | None
+    imo: int | None = None
+    width_m: int | None = None
+    draft_m: float | None = None
+    destination: str | None = None
+    cargo: int | None = None
 
 
 Report = Position | Static
@@ -69,7 +74,11 @@ class VesselRecord(TypedDict):
     type: str
     length_m: int | None
     callsign: str | None
-    vessel_class: Literal["A", "B"]
+    imo: int | None
+    width_m: int | None
+    draft_m: float | None
+    destination: str | None
+    vessel_class: Literal["A", "B"] | None
     lat: float
     lon: float
     sog_kn: float | None
@@ -95,6 +104,15 @@ class Vessel:
     callsign: str | None = None
     type_code: int | None = None
     length_m: int | None = None
+    imo: int | None = None
+    width_m: int | None = None
+    draft_m: float | None = None
+    destination: str | None = None
+    cargo: int | None = None
+
+
+def below(value: float | None, limit: float) -> float | None:
+    return value if value is not None and value < limit else None
 
 
 def type_word(code: int | None) -> str:
@@ -138,6 +156,10 @@ def public_record(
         "type": kind,
         "length_m": length_m,
         "callsign": identity.callsign if identified and identity else None,
+        "imo": identity.imo if identified and identity else None,
+        "width_m": identity.width_m if identified and identity else None,
+        "draft_m": identity.draft_m if identified and identity else None,
+        "destination": identity.destination if identified and identity else None,
         "vessel_class": position.vessel_class,
         "lat": position.lat,
         "lon": position.lon,
@@ -263,6 +285,11 @@ class Fleet:
         vessel.callsign = report.callsign or vessel.callsign
         vessel.type_code = report.type_code or vessel.type_code
         vessel.length_m = report.length_m or vessel.length_m
+        vessel.imo = report.imo or vessel.imo
+        vessel.width_m = report.width_m or vessel.width_m
+        vessel.draft_m = report.draft_m or vessel.draft_m
+        vessel.destination = report.destination or vessel.destination
+        vessel.cargo = report.cargo or vessel.cargo
         vessel.last_heard = max(vessel.last_heard, min(report.heard_at, received_at))
         if before is None:
             return None, "static_pending"
@@ -279,6 +306,11 @@ class Fleet:
             vessel.callsign,
             vessel.type_code,
             vessel.length_m,
+            vessel.imo,
+            vessel.width_m,
+            vessel.draft_m,
+            vessel.destination,
+            vessel.cargo,
         )
         return public_record(
             vessel.id, position, identity, vessel.received_at, vessel.flags, self._source

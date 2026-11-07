@@ -10,7 +10,7 @@ from itertools import pairwise
 from pathlib import Path
 from typing import TypedDict
 
-from check import OUT, problems_in
+from check import OUT, is_private, problems_in
 
 RAW = Path(__file__).resolve().parent / "raw"
 STEP = 300  # seconds between kept positions of one vessel
@@ -50,7 +50,6 @@ TYPE_WORDS = {
     "54": "Anti-pollution",
     "55": "Law enforcement",
 }
-PRIVATE = {"Fishing", "Sailing", "Pleasure craft"}
 
 
 class Vessel(TypedDict):
@@ -78,6 +77,10 @@ def type_word(code: str) -> str:
     return {"6": "Passenger", "7": "Cargo", "8": "Tanker"}.get(decade, "Other")
 
 
+def length_m(row: dict[str, str]) -> int | None:
+    return int(float(row["Length"])) if row["Length"] else None
+
+
 def ring_from_kml(kml: str) -> list[list[float]]:
     found = re.search(r"<coordinates>(.*?)</coordinates>", kml, re.DOTALL)
     assert found, "no <coordinates> in the KML"
@@ -102,8 +105,8 @@ def tracks(rows: list[dict[str, str]]) -> list[Vessel]:
             continue
         seen.add((r["MMSI"], t // STEP))
         kind = type_word(r["VesselType"])
-        length = int(float(r["Length"])) if r["Length"] else None
-        private = kind in PRIVATE
+        length = length_m(r)
+        private = is_private(kind, length)
         name = r["VesselName"].strip()
         if private or not name:
             name = f"{kind}, {length} m" if length else kind
@@ -124,7 +127,11 @@ def tracks(rows: list[dict[str, str]]) -> list[Vessel]:
         v["track"].append([t, round(float(r["LON"]), 5), round(float(r["LAT"]), 5)])
     for v in vessels.values():
         v["track"].sort()
-    anonymous = [vessels[k] for k in sorted(vessels) if vessels[k]["type"] in PRIVATE]
+    anonymous = [
+        vessels[k]
+        for k in sorted(vessels)
+        if is_private(vessels[k]["type"], vessels[k]["length_m"])
+    ]
     for n, v in enumerate(anonymous, 1):
         v["id"] = f"private-{n}"
     return sorted(vessels.values(), key=lambda v: v["id"])

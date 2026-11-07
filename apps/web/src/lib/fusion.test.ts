@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
 import { data, type Vessel } from "@/lib/data";
 import type { Detection, SensorData } from "@/lib/sensors";
-import { interpolateAt, corroboration, echoCounts, matchAis, radarEntries, wedge } from "./fusion";
+import { interpolateAt, corroboration, echoCounts, matchAis, radarEntries } from "./fusion";
 
 const vessel = (id: string, track: number[][]): Vessel => ({
   id,
@@ -97,8 +97,8 @@ test("radarEntries marks every crossing into the boundary unidentified", () => {
 
 const hit = (over: Partial<Detection>): Detection => ({
   t: 1000,
-  sensor: "cam",
-  kind: "camera",
+  sensor: "lidar-1",
+  kind: "lidar",
   lon: -122.7,
   lat: LAT,
   size_m: 12,
@@ -112,14 +112,14 @@ test("corroboration keeps each other sensor's most confident hit near the radar 
   const hits = [
     hit({ confidence: 0.7 }),
     hit({ confidence: 0.9, t: 1060 }),
-    hit({ sensor: "lidar", kind: "lidar", boat: false, label: "debris", confidence: 0.6 }),
+    hit({ sensor: "lidar-2", boat: false, label: "debris", confidence: 0.6 }),
     hit({ sensor: "radar", kind: "radar" }), // radar is what is being corroborated
     hit({ sensor: "far", lat: LAT + 0.01 }), // over a kilometre away
     hit({ sensor: "late", t: 2000 }), // over two minutes later
   ];
   expect(corroboration(hits, -122.7, LAT, 1000)).toEqual([
-    { sensor: "cam", kind: "camera", boat: true, label: "small vessel", confidence: 0.9 },
-    { sensor: "lidar", kind: "lidar", boat: false, label: "debris", confidence: 0.6 },
+    { sensor: "lidar-1", kind: "lidar", boat: true, label: "small vessel", confidence: 0.9 },
+    { sensor: "lidar-2", kind: "lidar", boat: false, label: "debris", confidence: 0.6 },
   ]);
 });
 
@@ -128,19 +128,10 @@ test("echoCounts counts radar echoes up to t, and how many were judged not a boa
     hit({ kind: "radar", t: 100 }),
     hit({ kind: "radar", t: 200, boat: false, label: "bird" }),
     hit({ kind: "radar", t: 300, boat: false, label: "debris" }),
-    hit({ kind: "camera", t: 100, boat: false }),
+    hit({ kind: "lidar", t: 100, boat: false }),
   ];
   expect(echoCounts(hits, 200)).toEqual({ echoes: 2, boats: 1, dropped: 1 });
   expect(echoCounts(hits, 300)).toEqual({ echoes: 3, boats: 1, dropped: 2 });
-});
-
-test("wedge starts and ends at the sensor and reaches its range at the centre bearing", () => {
-  const ring = wedge({ lon: -122.7, lat: LAT, range_m: 1000, bearing_deg: 0, fov_deg: 90 });
-  expect(ring.at(0)).toEqual([-122.7, LAT]);
-  expect(ring.at(-1)).toEqual([-122.7, LAT]);
-  const north = ring[Math.floor(ring.length / 2)] ?? [];
-  expect(north[0]).toBeCloseTo(-122.7);
-  expect(((north[1] ?? 0) - LAT) * 111_320).toBeCloseTo(1000, -1);
 });
 
 // The generated files: the app's copy has no ground truth; nonais/sensors.json keeps it for scoring.

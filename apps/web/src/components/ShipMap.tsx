@@ -15,7 +15,7 @@ export type Ship = {
   lat: number;
 };
 export type Path = { id: string; status: ShipStatus; latLngs: [number, number][] };
-// A sensor's field of view: a ring for a camera's wedge, else a circle of range_m.
+// A sensor's field of view: a circle of range_m around it.
 export type Coverage = {
   id: string;
   name: string;
@@ -24,7 +24,6 @@ export type Coverage = {
   lon: number;
   lat: number;
   range_m: number;
-  ring?: number[][];
 };
 
 const STATUS_COLOR: Record<ShipStatus, string> = {
@@ -111,11 +110,9 @@ export default function ShipMap({
     layer.clearLayers();
     const style = { color: "#7e22ce", weight: 1, dashArray: "4 4", fillOpacity: 0.04 };
     for (const c of coverage) {
-      const wedge: [number, number][] | undefined = c.ring?.map(([lon = 0, lat = 0]) => [lat, lon]);
-      const shape = wedge
-        ? L.polygon(wedge, style)
-        : L.circle([c.lat, c.lon], { ...style, radius: c.range_m });
-      shape.bindTooltip(c.name).addTo(layer);
+      L.circle([c.lat, c.lon], { ...style, radius: c.range_m })
+        .bindTooltip(c.name)
+        .addTo(layer);
       // A text tag, not a dot, so a sensor site is never mistaken for a boat.
       const tag = L.divIcon({
         className: "rounded bg-purple-800 px-1 text-[10px] leading-4 whitespace-nowrap text-white",

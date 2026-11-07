@@ -2,7 +2,7 @@
   "sources": [
     {
       "id": "synthetic-sensors",
-      "name": "Synthetic radar, thermal camera and LIDAR data, invented for the demo",
+      "name": "Synthetic radar and LIDAR data, invented for the demo",
       "url": "https://github.com/SkylerrSimpson/wwu-sj-hack",
       "retrieved": "2026-11-07"
     }
@@ -19,20 +19,6 @@
       "pos_m": 25,
       "size_err": 0.4,
       "judge_noise": 1.0
-    },
-    {
-      "id": "cam-gooseberry",
-      "kind": "camera",
-      "name": "Thermal camera, Gooseberry Point (synthetic)",
-      "lon": -122.676,
-      "lat": 48.738,
-      "range_m": 5000,
-      "bearing_deg": 330,
-      "fov_deg": 100,
-      "every_s": 120,
-      "pos_m": 15,
-      "size_err": 0.2,
-      "judge_noise": 0.6
     },
     {
       "id": "lidar-lummi-bay",

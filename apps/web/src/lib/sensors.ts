@@ -4,14 +4,11 @@ import type { Source, Vessel } from "@/lib/data";
 
 export type Sensor = {
   id: string;
-  kind: "radar" | "camera" | "lidar";
+  kind: "radar" | "lidar";
   name: string;
   lon: number;
   lat: number;
   range_m: number;
-  // A camera sees a wedge: centred on bearing_deg (from north, clockwise), fov_deg wide.
-  bearing_deg?: number;
-  fov_deg?: number;
 };
 export type Detection = {
   t: number;

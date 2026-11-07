@@ -25,14 +25,7 @@ import {
   type Config,
 } from "@/lib/config";
 import type { Data, Vessel } from "@/lib/data";
-import {
-  corroboration,
-  echoCounts,
-  interpolateAt,
-  matchAis,
-  radarEntries,
-  wedge,
-} from "@/lib/fusion";
+import { corroboration, echoCounts, interpolateAt, matchAis, radarEntries } from "@/lib/fusion";
 import type { SensorData } from "@/lib/sensors";
 import { STATUS_WORD, type ShipStatus } from "@/lib/status";
 import {
@@ -48,7 +41,7 @@ import {
 const ShipMap = dynamic(() => import("./ShipMap"), { ssr: false });
 
 const SPEEDS = [60, 600, 3600];
-const SENSOR_LABEL = { radar: "Radar", camera: "Thermal camera", lidar: "LIDAR" };
+const SENSOR_LABEL = { radar: "Radar", lidar: "LIDAR" };
 const TICK_MS = 250;
 const STORAGE_KEY = "vesselConfig";
 
@@ -115,7 +108,7 @@ function ReplayView({ data }: { data: Data }) {
 
   const lists = useMemo(() => listsFor(data.vessels, config), [data.vessels, config]);
 
-  // The synthetic radar, camera and LIDAR load only when switched on, so the AIS replay never
+  // The synthetic radar and LIDAR load only when switched on, so the AIS replay never
   // depends on them.
   const [sensorsOn, setSensorsOn] = useState(false);
   const [sensors, setSensors] = useState<SensorData | null>(null);
@@ -142,7 +135,6 @@ function ReplayView({ data }: { data: Data }) {
       lon: s.lon,
       lat: s.lat,
       range_m: s.range_m,
-      ring: s.fov_deg === undefined ? undefined : wedge(s),
     }));
     const firstEntry = radarEntries(unknown, data.boundary.ring, 0, Infinity)[0]?.t;
     return { sensors, matched, unknown, coverage, firstEntry };
@@ -267,7 +259,7 @@ function ReplayView({ data }: { data: Data }) {
               checked={sensorsOn}
               onChange={(e) => setSensorsOn(e.target.checked)}
             />
-            Synthetic radar, camera and LIDAR
+            Synthetic radar and LIDAR
           </label>
           {radarStart !== undefined && (
             <Button size="sm" variant="outline" onClick={() => setT(radarStart - 600)}>
@@ -459,7 +451,7 @@ function ReplayView({ data }: { data: Data }) {
 const percent = (x: number) => `${Math.round(x * 100)}%`;
 
 // What the tool knows about a boat radar sees and AIS doesn't: its size, where it is, and what
-// the camera and LIDAR made of that spot. Never who it is.
+// LIDAR made of that spot. Never who it is.
 function RadarContact({
   contact,
   sensors,
@@ -493,7 +485,7 @@ function RadarContact({
         {!p ? (
           <p className="mt-1">Radar doesn&apos;t see it at this time.</p>
         ) : sightings.length === 0 ? (
-          <p className="mt-1">No camera or LIDAR sees this spot right now.</p>
+          <p className="mt-1">LIDAR doesn&apos;t see this spot right now.</p>
         ) : (
           <ul className="mt-1 list-disc pl-5">
             {sightings.map((s) => (

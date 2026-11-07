@@ -1,4 +1,4 @@
-"""Synthetic radar, thermal camera and LIDAR data for Lummi waters. The sensors are not real.
+"""Synthetic radar and LIDAR data for Lummi waters. The sensors are not real.
 
 Usage: python generate.py <repo data.json> <out dir> <web file>
   e.g. python generate.py ../apps/web/public/data.json . ../apps/web/public/sensors.json
@@ -38,12 +38,12 @@ DEFAULT_SIZE_M = 10  # for AIS vessels with no length
 T0 = int(datetime(2024, 12, 6, 5, 0, tzinfo=UTC).timestamp())  # 9 PM Pacific, Dec 5
 T_END = T0 + 6 * 3600
 
-COVERAGE_KEYS = ("id", "kind", "name", "lon", "lat", "range_m", "bearing_deg", "fov_deg")
+COVERAGE_KEYS = ("id", "kind", "name", "lon", "lat", "range_m")
 DETECTION_KEYS = ("t", "sensor", "kind", "lon", "lat", "size_m", "boat", "label", "confidence")
 
 SOURCE = {
     "id": "synthetic-sensors",
-    "name": "Synthetic radar, thermal camera and LIDAR data, invented for the demo",
+    "name": "Synthetic radar and LIDAR data, invented for the demo",
     "url": "https://github.com/SkylerrSimpson/wwu-sj-hack",
     "retrieved": "2026-11-07",
 }
@@ -63,20 +63,6 @@ SENSORS: list[dict[str, Any]] = [
         "pos_m": 25,
         "size_err": 0.4,
         "judge_noise": 1.0,
-    },
-    {
-        "id": "cam-gooseberry",
-        "kind": "camera",
-        "name": "Thermal camera, Gooseberry Point (synthetic)",
-        "lon": -122.676,
-        "lat": 48.738,
-        "range_m": 5_000,
-        "bearing_deg": 330,
-        "fov_deg": 100,
-        "every_s": 120,
-        "pos_m": 15,
-        "size_err": 0.2,
-        "judge_noise": 0.6,
     },
     {
         "id": "lidar-lummi-bay",
@@ -165,12 +151,7 @@ def offset_m(lon: float, lat: float, olon: float, olat: float) -> tuple[float, f
 
 def sees(sensor: dict, lon: float, lat: float) -> bool:
     east, north = offset_m(lon, lat, sensor["lon"], sensor["lat"])
-    if math.hypot(east, north) > sensor["range_m"]:
-        return False
-    if "fov_deg" not in sensor:
-        return True
-    bearing = math.degrees(math.atan2(east, north)) % 360
-    return abs((bearing - sensor["bearing_deg"] + 180) % 360 - 180) <= sensor["fov_deg"] / 2
+    return math.hypot(east, north) <= sensor["range_m"]
 
 
 def true_path(start: int, legs: list[tuple]) -> dict[int, tuple[float, float]]:

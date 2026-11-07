@@ -1,5 +1,5 @@
 import type { Vessel } from "@/lib/data";
-import type { Detection, Sensor } from "@/lib/sensors";
+import type { Detection } from "@/lib/sensors";
 import { newEntries, type Entry } from "@/lib/vessel";
 
 // Radar sees boats but not who they are; AIS says who a boat is but only if it broadcasts.
@@ -67,7 +67,7 @@ export function radarEntries(
 
 export type Sighting = Pick<Detection, "sensor" | "kind" | "boat" | "label" | "confidence">;
 
-// What the camera and LIDAR made of the spot where radar has a boat: each sensor's most
+// What LIDAR made of the spot where radar has a boat: each sensor's most
 // confident hit within 150 m and 2 minutes.
 export function corroboration(
   detections: Detection[],
@@ -102,22 +102,4 @@ export function echoCounts(
       if (d.boat) boats++;
     }
   return { echoes, boats, dropped: echoes - boats };
-}
-
-// A camera's field of view as a closed [lon, lat] ring; flat-earth is fine at a few km.
-export function wedge(
-  s: Pick<Sensor, "lon" | "lat" | "range_m" | "bearing_deg" | "fov_deg">,
-): number[][] {
-  const fov = s.fov_deg ?? 360;
-  const from = (s.bearing_deg ?? 0) - fov / 2;
-  const steps = 16;
-  const arc: number[][] = [];
-  for (let i = 0; i <= steps; i++) {
-    const b = ((from + (fov * i) / steps) * Math.PI) / 180;
-    arc.push([
-      s.lon + (s.range_m * Math.sin(b)) / (M_PER_DEG_LAT * Math.cos((s.lat * Math.PI) / 180)),
-      s.lat + (s.range_m * Math.cos(b)) / M_PER_DEG_LAT,
-    ]);
-  }
-  return [[s.lon, s.lat], ...arc, [s.lon, s.lat]];
 }

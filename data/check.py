@@ -19,13 +19,15 @@ def problems_in(data: dict) -> list[str]:
         return problems
     source_ids = {s["id"] for s in data["sources"]}
     problems += [
-        f"records/{i}: source {r['source']!r} is not in sources"
-        for i, r in enumerate(data["records"])
-        if r["source"] not in source_ids
+        f"vessels/{i}: source {v['source']!r} is not in sources"
+        for i, v in enumerate(data["vessels"])
+        if v["source"] not in source_ids
     ]
-    dupes = sorted(i for i, n in Counter(r["id"] for r in data["records"]).items() if n > 1)
+    if data["boundary"]["source"] not in source_ids:
+        problems.append(f"boundary: source {data['boundary']['source']!r} is not in sources")
+    dupes = sorted(i for i, n in Counter(v["id"] for v in data["vessels"]).items() if n > 1)
     if dupes:
-        problems.append(f"duplicate record ids: {dupes}")
+        problems.append(f"duplicate vessel ids: {dupes}")
     return problems
 
 

@@ -1,11 +1,14 @@
 import { expect, test } from "vitest";
 import { DEFAULT_CONFIG, type Config } from "./config";
+import { DEFAULT_FILTER, type Filter } from "./stats";
 import {
   readConfig,
   readEmail,
+  readFilter,
   readPanelWidth,
   writeConfig,
   writeEmail,
+  writeFilter,
   writePanelWidth,
   type StorageLike,
 } from "./storage";
@@ -72,4 +75,14 @@ test("readPanelWidth is null when missing or not a number, and writePanelWidth s
   expect(readPanelWidth(storage)).toBe(420);
   expect(readPanelWidth(throwing)).toBeNull();
   expect(() => writePanelWidth(throwing, 420)).not.toThrow();
+});
+
+test("the map filter round-trips under plotFilter and falls back to every vessel", () => {
+  const { map, storage } = fake();
+  expect(readFilter(storage)).toEqual(DEFAULT_FILTER);
+  const f: Filter = { categories: new Set(["fishing"]), start: 1, end: 2 };
+  writeFilter(storage, f);
+  expect([...map.keys()]).toEqual(["plotFilter"]);
+  expect(readFilter(storage)).toEqual(f);
+  expect(readFilter(throwing)).toEqual(DEFAULT_FILTER);
 });

@@ -1,4 +1,5 @@
 import { DEFAULT_CONFIG, parseConfig, serializeConfig, type Config } from "@/lib/config";
+import { DEFAULT_FILTER, parseFilter, serializeFilter, type Filter } from "@/lib/stats";
 
 export type StorageLike = {
   getItem(k: string): string | null;
@@ -8,6 +9,7 @@ export type StorageLike = {
 const CONFIG_KEY = "vesselConfig";
 const EMAIL_KEY = "alertEmail";
 const PANEL_KEY = "panelWidth";
+const FILTER_KEY = "plotFilter";
 
 // Storage can throw (private mode, quota, blocked); it then reads as empty and drops writes.
 const read = (storage: StorageLike, key: string): string | null => {
@@ -43,3 +45,9 @@ export const readPanelWidth = (storage: StorageLike): number | null => {
 
 export const writePanelWidth = (storage: StorageLike, width: number): void =>
   write(storage, PANEL_KEY, String(width));
+
+export const readFilter = (storage: StorageLike): Filter =>
+  parseFilter(read(storage, FILTER_KEY) ?? "") ?? DEFAULT_FILTER;
+
+export const writeFilter = (storage: StorageLike, f: Filter): void =>
+  write(storage, FILTER_KEY, serializeFilter(f));

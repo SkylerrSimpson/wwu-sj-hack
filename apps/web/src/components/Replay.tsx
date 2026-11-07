@@ -2,11 +2,15 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
+import { X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import AlertPanel from "@/components/AlertPanel";
+import FilterPanel from "@/components/FilterPanel";
+import Plots from "@/components/Plots";
 import SidePanel from "@/components/SidePanel";
 import TopBar from "@/components/TopBar";
 import { useConfig } from "@/components/useConfig";
+import { useFilter } from "@/components/useFilter";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -25,6 +29,15 @@ import { directionAt } from "@/lib/heading";
 import { merge, parseRecord } from "@/lib/live";
 import { RADAR_RANGE_M, RADAR_SITES } from "@/lib/radar";
 import { callsignText } from "@/lib/privacy";
+import {
+  byCategory,
+  CATEGORIES,
+  countsOverTime,
+  extent,
+  filterVessels,
+  heatmap,
+  stepFor,
+} from "@/lib/stats";
 import { STATUS_WORD, type ShipStatus } from "@/lib/status";
 import {
   inLummiWaters,
@@ -41,6 +54,7 @@ const SPEEDS = [60, 600, 3600];
 const TICK_MS = 250;
 const COVERAGE: Coverage[] = RADAR_SITES.map((s) => ({ ...s, rangeM: RADAR_RANGE_M }));
 const STREAMER = process.env.NEXT_PUBLIC_STREAMER_URL ?? "http://127.0.0.1:8787";
+const HEAT_COLS = 48;
 const BANNER = "Approved list invented for this demo; no vessel shown is suspected of anything.";
 const CAVEAT =
   "Most small boats carry no AIS, so no alert does not mean no boat. Approximate boundary, not a legal boundary.";
@@ -111,6 +125,8 @@ function ReplayView({ data }: { data: Data }) {
   const [radarOn, setRadarOn] = useState(false);
   const [overlay, setOverlay] = useState(true);
   const [collapsed, setCollapsed] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [filter, setFilter] = useFilter();
   const [entries, setEntries] = useState<Entry[]>([]);
   const [mode, setMode] = useState<Mode>("replay");
   const [live, setLive] = useState<Map<string, Vessel>>(new Map());
@@ -166,6 +182,43 @@ function ReplayView({ data }: { data: Data }) {
   const vessels = mode === "live" ? liveVessels : data.vessels;
   const at = mode === "live" ? now : t;
   const lists = useMemo(() => listsFor(vessels, config), [vessels, config]);
+  // The filter picks what the map and charts show; entries and alerts still use every vessel.
+  const shown = useMemo(() => filterVessels(vessels, filter), [vessels, filter]);
+
+  // A chosen end shows the whole window at once; otherwise charts follow the clock, recomputed
+  // once per interval, not per tick.
+  const box = useMemo(() => extent(data.vessels), [data.vessels]);
+  const heatRows = Math.max(
+    1,
+    Math.round(
+      (HEAT_COLS * (box.north - box.south)) /
+        ((box.east - box.west) * Math.cos((((box.north + box.south) / 2) * Math.PI) / 180)),
+    ),
+  );
+  const firstFix =
+    mode === "live" ? Math.min(at, ...liveVessels.map((v) => v.track[0]?.[0] ?? at)) : start;
+  const plotFrom = filter.start ?? firstFix;
+  const plotTo = Math.max(plotFrom, filter.end ?? (mode === "live" ? at : end));
+  const step = stepFor(plotTo - plotFrom);
+  const cut =
+    filter.end !== null
+      ? plotTo
+      : Math.max(plotFrom, Math.min(plotTo, plotFrom + Math.ceil((at - plotFrom) / step) * step));
+  const plots = useMemo(
+    () => ({
+      series: countsOverTime(shown, plotFrom, cut, step, data.boundary.ring),
+      pie: byCategory(shown, plotFrom, cut),
+      heat: heatmap(shown, plotFrom, cut, box, HEAT_COLS, heatRows),
+    }),
+    [shown, plotFrom, cut, step, box, heatRows, data.boundary.ring],
+  );
+  const types =
+    filter.categories.size === CATEGORIES.length
+      ? "All types"
+      : CATEGORIES.filter(([c]) => filter.categories.has(c))
+          .map(([, label]) => label)
+          .join(", ") || "No types";
+  const plotSummary = `${types}: ${shown.length} vessels. ${clock.format(plotFrom * 1000)} to ${clock.format(cut * 1000)}.`;
 
   useEffect(() => {
     if (!playing) return;
@@ -211,17 +264,17 @@ function ReplayView({ data }: { data: Data }) {
   const paths = useMemo<Path[]>(
     () =>
       showPaths
-        ? vessels.map((v) => ({
+        ? shown.map((v) => ({
             id: v.id,
             status: shownStatus(v, lists, suspicious),
             latLngs: v.track.map(([, lon = 0, lat = 0]) => [lat, lon]),
           }))
         : [],
-    [showPaths, vessels, lists, suspicious],
+    [showPaths, shown, lists, suspicious],
   );
   const picked = vessels.find((v) => v.id === selected);
   const pickedPos = picked ? positionAt(picked.track, at) : null;
-  const ships: Ship[] = vessels.flatMap((v) => {
+  const ships: Ship[] = shown.flatMap((v) => {
     const p = positionAt(v.track, at);
     return p
       ? [
@@ -457,6 +510,8 @@ function ReplayView({ data }: { data: Data }) {
         onShowPaths={setShowPaths}
         showRadar={radarOn}
         onShowRadar={setRadarOn}
+        menuOpen={menuOpen}
+        onMenu={() => setMenuOpen((o) => !o)}
         overlayShown={overlay}
         onToggleOverlay={() => setOverlay((o) => !o)}
         banner={BANNER}
@@ -469,6 +524,37 @@ function ReplayView({ data }: { data: Data }) {
         onCollapse={setCollapsed}
         footer={footer}
       />
+      {/* Slides over the column, the same size, so the map keeps its room; invisible when closed keeps it out of the tab order. */}
+      <aside
+        aria-label="Filters and charts"
+        className={`absolute top-[76px] bottom-0 left-0 z-30 w-80 space-y-4 overflow-y-auto border-r bg-background p-3 shadow-xl transition-all duration-300 ease-out motion-reduce:transition-none ${menuOpen ? "" : "invisible -translate-x-full"}${overlay ? "" : " hidden"}`}
+      >
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold">Filters and charts</h2>
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            aria-label="Close"
+            onClick={() => setMenuOpen(false)}
+          >
+            <X />
+          </Button>
+        </div>
+        <FilterPanel filter={filter} onFilter={setFilter} start={start} end={end} />
+        <Plots
+          summary={plotSummary}
+          from={plotFrom}
+          to={plotTo}
+          cut={cut}
+          step={step}
+          box={box}
+          ring={data.boundary.ring}
+          {...plots}
+        />
+        <Link href="/settings" className="block text-sm underline">
+          Settings
+        </Link>
+      </aside>
     </div>
   );
 }

@@ -1,8 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { Eye, EyeOff, Menu, Pause, Play } from "lucide-react";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -28,6 +27,8 @@ export type TopBarProps = {
   onShowPaths: (b: boolean) => void;
   showRadar: boolean;
   onShowRadar: (b: boolean) => void;
+  menuOpen: boolean;
+  onMenu: () => void;
   overlayShown: boolean;
   onToggleOverlay: () => void;
   banner: string;
@@ -65,16 +66,18 @@ export default function TopBar(p: TopBarProps) {
         <Tooltip>
           <TooltipTrigger
             render={
-              <Link
-                href="/settings"
-                aria-label="Settings"
-                className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
+              <Button
+                size="icon-sm"
+                variant={p.menuOpen ? "secondary" : "ghost"}
+                aria-label="Filters and charts"
+                aria-expanded={p.menuOpen}
+                onClick={p.onMenu}
               />
             }
           >
             <Menu />
           </TooltipTrigger>
-          <TooltipContent side="bottom">Settings</TooltipContent>
+          <TooltipContent side="bottom">Filters and charts</TooltipContent>
         </Tooltip>
         <span className="text-sm whitespace-nowrap">
           <span className="font-bold">LVT</span>{" "}

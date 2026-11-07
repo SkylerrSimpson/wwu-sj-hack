@@ -1,0 +1,54 @@
+# The hosted stack: the streamer, its public HTTPS address, and the updater that keeps it on main.
+# Run it through compose.sh, which fills in the paths and ids. Undo it all with `compose.sh down -v`.
+name: lummi
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: "3"
+
+services:
+  streamer:
+    extends:
+      file: ../compose.yaml
+      service: streamer
+
+  # Its own Tailscale device, so the host's Tailscale, ports and firewall stay untouched.
+  funnel:
+    image: tailscale/tailscale:v1.104.2
+    restart: unless-stopped
+    environment:
+      TS_HOSTNAME: lummi
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_USERSPACE: "true"
+      TS_SERVE_CONFIG: /config/serve.json
+    volumes:
+      - tailscale:/var/lib/tailscale
+      - ./serve.json:/config/serve.json:ro
+    depends_on: [streamer]
+    logging: *logging
+
+  updater:
+    build:
+      context: .
+      dockerfile: updater.Dockerfile
+      args:
+        UID: ${STREAMER_UID}
+    restart: unless-stopped
+    user: "${STREAMER_UID}:${DOCKER_GID}"
+    environment:
+      LUMMI_HOME: ${LUMMI_HOME}
+      STREAMER_UID: ${STREAMER_UID}
+      STREAMER_GID: ${STREAMER_GID}
+      DOCKER_GID: ${DOCKER_GID}
+      STREAMER_PUBLISH_PORT: ${STREAMER_PUBLISH_PORT}
+    # The same path as on the host, because compose hands bind-mount paths to the host's daemon.
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${LUMMI_HOME}:${LUMMI_HOME}
+    command: ["sh", "-c", "while :; do sh \"$$LUMMI_HOME/repo/apps/streamer/deploy/update.sh\"; sleep 60; done"]
+    logging: *logging
+
+volumes:
+  tailscale:

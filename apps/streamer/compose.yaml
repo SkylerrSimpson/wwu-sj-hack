@@ -2,7 +2,7 @@ services:
   streamer:
     build: .
     restart: unless-stopped
-    env_file: .env
+    env_file: ${STREAMER_ENV_FILE:-.env}
     environment:
       STREAMER_HOST: 0.0.0.0
       STREAMER_DB: /data/ais.db

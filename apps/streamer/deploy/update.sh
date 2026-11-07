@@ -1,6 +1,7 @@
 #!/bin/sh
 # Brings this checkout up to origin/main and rebuilds the streamer when its files changed.
-# Cron runs it every minute, so the team deploys by pushing to main and never needs this host.
+# The updater service runs it each minute, so the team deploys by pushing to main and never needs
+# access to this host.
 set -eu
 cd "$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
 
@@ -17,8 +18,8 @@ last=$(cat "$state" 2>/dev/null || echo none)
 # An unknown last commit (first run, or history rewritten) diffs as an error, which means rebuild.
 changed=$(git diff --name-only "$last" "$now" -- apps/streamer 2>/dev/null || echo unknown)
 if [ -n "$changed" ]; then
-  docker compose -f apps/streamer/compose.yaml up -d --build --remove-orphans
-  echo "$(date -Is) streamer deployed at $now"
+  sh apps/streamer/deploy/compose.sh up -d --build streamer
+  echo "$(date -u +%FT%TZ) streamer deployed at $now"
 fi
 # Written only after a successful build, so a failed one is retried next minute.
 echo "$now" >"$state"

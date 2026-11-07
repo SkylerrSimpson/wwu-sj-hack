@@ -180,6 +180,8 @@ def parse(raw: str | bytes) -> list[Report]:
     try:
         meta = data["MetaData"]
         body = data["Message"][kind]
+        if not 0 < int(meta["MMSI"]) < 2**31:
+            raise Rejected("bad_shape")
         heard = parse_time(meta["time_utc"])
         if kind in STATIC_KINDS:
             static = parse_static(kind, body, int(meta["MMSI"]), heard)

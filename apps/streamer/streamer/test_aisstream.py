@@ -150,6 +150,12 @@ def test_a_missing_field_is_rejected_not_a_crash() -> None:
     assert rejected.value.reason == "bad_shape"
 
 
+def test_an_mmsi_that_cant_be_real_is_rejected() -> None:
+    for bad in [0, -1, 2**70]:
+        with pytest.raises(aisstream.Rejected, match="bad_shape"):
+            aisstream.parse(message("PositionReport", class_a(), MMSI=bad))
+
+
 def test_an_unknown_message_type_is_rejected() -> None:
     with pytest.raises(aisstream.Rejected) as rejected:
         aisstream.parse(message("AidsToNavigationReport", {}))

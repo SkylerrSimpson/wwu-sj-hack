@@ -1,4 +1,5 @@
 import sqlite3
+import time
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -479,3 +480,61 @@ def test_density_wont_point_at_a_lone_private_boats_dock(path: Path) -> None:
     enough = [identity(BOAT + 2, 37), position(T0, mmsi=BOAT + 2)]
     [cell] = store(path, *enough).density(T0 - 1, T0 + 100)
     assert cell["vessels"] == 3
+
+
+def test_a_second_writer_cant_erase_what_another_wrote(path: Path) -> None:
+    recorder_side = Archive(path)
+    import_side = Archive(path)
+    import_side.write([identity(type_code=70, name="SHIP", heard_at=T0 - 100, source="noaa")])
+    recorder_side.write([position(T0, name="SHIP")])
+    import_side.close()
+    recorder_side.close()
+    [record] = Reader(path, SALT).frame(T0, 30)
+    assert (record["type"], record["mmsi"]) == ("Cargo", SHIP)
+
+
+def test_one_unstorable_report_costs_only_itself(path: Path) -> None:
+    recorder = Recorder(path)
+    recorder.add(replace(BASE, heard_at=T0), T0, (), "live")
+    recorder.add(replace(BASE, heard_at=T0 + 1, mmsi=2**70), T0, (), "live")
+    recorder.add(replace(BASE, heard_at=T0 + 2), T0, (), "live")
+    recorder.flush()
+    summary = recorder.summary()
+    assert (summary["written"], summary["rejected"], summary["pending"]) == (2, 1, 0)
+    recorder.close()
+
+
+def test_the_thread_survives_a_bug_in_flush(path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    recorder = Recorder(path, flush_every=0.01)
+
+    def broken() -> None:
+        raise RuntimeError("bug")
+
+    monkeypatch.setattr(recorder, "flush", broken)
+    recorder.start()
+    time.sleep(0.1)
+    assert recorder.summary()["alive"] is True
+    assert recorder.summary()["last_error"] == "bug"
+    monkeypatch.undo()
+    recorder.stop()
+
+
+def test_stopping_retries_when_the_file_is_briefly_busy(
+    path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    recorder = Recorder(path, flush_every=3600.0)
+    real = recorder.archive.write
+    calls: list[int] = []
+
+    def busy_once(entries: Any) -> int:
+        calls.append(1)
+        if len(calls) == 1:
+            raise sqlite3.OperationalError("database is locked")
+        return real(entries)
+
+    monkeypatch.setattr(recorder.archive, "write", busy_once)
+    recorder.start()
+    recorder.add(BASE, T0, (), "live")
+    recorder.stop()
+    assert len(calls) == 2
+    assert len(Reader(path, SALT).frame(T0, 30)) == 1

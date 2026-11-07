@@ -10,7 +10,7 @@ import time
 from collections import Counter, deque
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from aiohttp import web
@@ -37,6 +37,7 @@ MAX_TRACK_S = 31 * 24 * 3600.0
 MAX_TRACK_POINTS = 10_000
 MAX_REPORTS_S = 7 * 24 * 3600.0
 MAX_REPORTS = 50_000
+MIN_YEAR, MAX_YEAR = 2000, 2100
 # Keeps slow history queries from taking every thread while the live stream carries on.
 MAX_HISTORY_QUERIES = 4
 
@@ -53,6 +54,8 @@ def time_param(request: web.Request, name: str, default: float) -> float:
         raise web.HTTPBadRequest(text=f"{name} must be an ISO 8601 time") from None
     if parsed.tzinfo is None:
         raise web.HTTPBadRequest(text=f"{name} must include a time zone, such as Z")
+    if not MIN_YEAR <= parsed.astimezone(UTC).year <= MAX_YEAR:
+        raise web.HTTPBadRequest(text=f"{name} must be between {MIN_YEAR} and {MAX_YEAR}")
     return parsed.timestamp()
 
 
@@ -89,9 +92,12 @@ def mmsi_param(request: web.Request) -> int | None:
     if text is None:
         return None
     try:
-        return int(text)
+        mmsi = int(text)
     except ValueError:
         raise web.HTTPBadRequest(text="mmsi must be a number") from None
+    if not 0 < mmsi < 2**31:
+        raise web.HTTPBadRequest(text="mmsi is out of range")
+    return mmsi
 
 
 def number_param(request: web.Request, name: str, default: float, high: float) -> float:

@@ -58,9 +58,11 @@ def parse_row(row: dict[str, str]) -> tuple[Position, Static] | None:
         sog, cog = number(row["sog"]), number(row["cog"])
         heading, status = whole(row["heading"]), whole(row["status"])
         type_code, length = whole(row["vessel_type"]), whole(row["length"])
-    except ValueError:
+        kind = row["transceiver"]
+    except (ValueError, KeyError, OverflowError):
         return None
-    kind = row["transceiver"]
+    if not 0 < mmsi < 2**31:
+        return None
     if not (-90 <= lat <= 90 and -180 <= lon <= 180) or kind not in ("A", "B"):
         return None
     position = Position(
@@ -106,11 +108,10 @@ def lines(source: Path | str) -> Iterator[str]:
 def import_file(source: Path | str, db_path: str | Path, box: Box = DEFAULT_BOX) -> Counter[str]:
     """Reads a local file or a URL. A national file has millions of rows, so the box comes first."""
     counts: Counter[str] = Counter()
-    first, last = float("inf"), float("-inf")
+    hours: set[int] = set()
     now = time.time()
 
     def entries() -> Iterator[Entry]:
-        nonlocal first, last
         reader = csv.reader(lines(source))
         header = next(reader)
         lat_at, lon_at = header.index("latitude"), header.index("longitude")
@@ -127,7 +128,7 @@ def import_file(source: Path | str, db_path: str | Path, box: Box = DEFAULT_BOX)
                 counts["rejected"] += 1
                 continue
             position, static = parsed
-            first, last = min(first, position.heard_at), max(last, position.heard_at)
+            hours.add(int(position.heard_at // 3600))
             yield Entry(static, now, (), SOURCE)
             yield Entry(position, now, (), SOURCE)
 
@@ -135,8 +136,9 @@ def import_file(source: Path | str, db_path: str | Path, box: Box = DEFAULT_BOX)
     try:
         for batch in batched(entries(), COMMIT_EVERY):
             counts["stored"] += archive.write(batch, cover=False)
-        if first <= last:
-            archive.cover(SOURCE, first, last)
+        # Hour by hour, so a stray row or a hole in a file can't claim time it doesn't hold.
+        for hour in sorted(hours):
+            archive.cover(SOURCE, hour * 3600.0, (hour + 1) * 3600.0)
     finally:
         archive.close()
     return counts
@@ -184,7 +186,12 @@ def import_days(newest: date, oldest: date, db_path: str, box: Box, workers: int
     with ProcessPoolExecutor(max_workers=workers) as pool:
         futures = [pool.submit(import_day, d, db_path, box) for d in wanted]
         for future in as_completed(futures):
-            day, counts, error = future.result()
+            try:
+                day, counts, error = future.result()
+            except Exception:
+                failed += 1
+                log.exception("a day's import crashed")
+                continue
             if counts is None:
                 failed += 1
                 log.warning("%s failed: %s", day, error)

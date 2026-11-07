@@ -75,6 +75,9 @@ def test_a_row_we_cant_trust_is_rejected() -> None:
         row(mmsi="abc"),
         row(transceiver=""),
         row(base_date_time="never"),
+        row(heading="inf"),
+        row(mmsi="99999999999999999999"),
+        {"mmsi": "222", "base_date_time": "2025-11-10T02:00:00", "latitude": "48.7"},
     ]:
         assert parse_row(bad) is None
 
@@ -171,3 +174,28 @@ def test_a_day_counts_as_imported_only_once_its_coverage_spans_the_day(tmp_path:
     archive.close()
     assert already_imported(db, day)
     assert not already_imported(db, date(2025, 11, 11))
+
+
+def test_a_short_row_in_a_file_is_counted_not_fatal(tmp_path: Path) -> None:
+    short = "222,2025-11-10 02:00:00,-122.6,48.7\n"
+    source = write_file(tmp_path, short, SHIP)
+    counts = import_file(source, tmp_path / "ais.db", BOX)
+    assert (counts["stored"], counts["rejected"]) == (1, 1)
+
+
+def test_a_stray_row_cant_claim_the_years_before_it(tmp_path: Path) -> None:
+    stray = SHIP.replace("2025-11-10 00:00:00", "2019-01-01 00:00:00")
+    db = tmp_path / "ais.db"
+    import_file(write_file(tmp_path, stray, SHIP), db, BOX)
+    assert not already_imported(db, date(2024, 3, 1))
+    assert len(Reader(db, b"s").coverage(T - 1e9, T + 3600)["segments"]) == 2
+
+
+def test_a_hole_in_a_file_stays_a_gap(tmp_path: Path) -> None:
+    late = SHIP.replace("2025-11-10 00:00:00", "2025-11-10 23:00:00")
+    db = tmp_path / "ais.db"
+    import_file(write_file(tmp_path, SHIP, late), db, BOX)
+    reader = Reader(db, b"s")
+    assert reader.covered(T + 1800)
+    assert not reader.covered(T + 12 * 3600)
+    assert not already_imported(db, date(2025, 11, 10))

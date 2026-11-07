@@ -32,6 +32,8 @@ COVERAGE_GAP_S = 300.0
 # How far past a segment's end still counts as covered: writes arrive in batches.
 COVERED_SLACK_S = 60.0
 BATCH = 5000
+# How long a stopping recorder keeps trying, for instance while an import holds the write lock.
+DRAIN_S = 40.0
 # About 1.1 km north-south and 0.7 km east-west here: fine enough to pick out a channel or a dock.
 CELLS_PER_DEGREE = 100
 
@@ -269,8 +271,19 @@ class Archive:
 
     def _note_identity(self, report: Static, source: str, changed: dict[int, Static]) -> None:
         current = changed.get(report.mmsi) or self._identities.get(report.mmsi)
+        if current is not None and same_identity(current, merged(current, report)):
+            return
+        # The cache only saves reads for repeats. Another writer, such as an import, may have
+        # changed this vessel, so a write starts from what the file holds now.
+        row = self._db.execute(
+            "SELECT mmsi, heard_at, name, callsign, type_code, length_m FROM identities "
+            "WHERE mmsi = ? ORDER BY heard_at DESC LIMIT 1",
+            (report.mmsi,),
+        ).fetchone()
+        current = Static(*row) if row else None
         identity = merged(current, report)
         if current is not None and same_identity(current, identity):
+            changed[report.mmsi] = current
             return
         self._db.execute(
             "INSERT OR REPLACE INTO identities VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -338,11 +351,15 @@ class Recorder:
             return
         try:
             self._written += self.archive.write(batch)
-        except (sqlite3.IntegrityError, sqlite3.ProgrammingError) as error:
+        except (sqlite3.IntegrityError, sqlite3.ProgrammingError, OverflowError) as error:
             # Retrying can't fix a bad row, and it mustn't block every report after it.
-            self._rejected += len(batch)
             self._last_error = str(error)
-            log.exception("the archive rejected %d reports", len(batch))
+            if len(batch) == 1:
+                self._rejected += 1
+                log.exception("the archive rejected a report")
+            else:
+                for entry in batch:
+                    self._write_one(entry)
         except sqlite3.Error as error:
             # A full or failing disk can recover, so keep them and try again.
             self._pending.extendleft(reversed(batch))
@@ -353,8 +370,18 @@ class Recorder:
             self._last_error = None
             self._last_write = time.time()
 
+    def _write_one(self, entry: Entry) -> None:
+        try:
+            self._written += self.archive.write([entry])
+        except (sqlite3.IntegrityError, sqlite3.ProgrammingError, OverflowError):
+            self._rejected += 1
+            log.exception("the archive rejected a report")
+        except sqlite3.Error:
+            self._pending.append(entry)
+
     def summary(self) -> dict[str, Any]:
         return {
+            "alive": self._thread.is_alive(),
             "pending": len(self._pending),
             "written": self._written,
             "dropped": self._dropped,
@@ -371,19 +398,29 @@ class Recorder:
     def stop(self) -> None:
         self._stopping.set()
         if self._thread.is_alive():
-            self._thread.join(timeout=30)
-        self.close()
+            self._thread.join(timeout=DRAIN_S + 35)
+        if not self._thread.is_alive():
+            self.close()
 
     def close(self) -> None:
         self.archive.close()
 
     def _run(self) -> None:
         while not self._stopping.wait(self._flush_every):
-            self.flush()
-        before = -1
-        while self._pending and len(self._pending) != before:
+            try:
+                self.flush()
+            except Exception as error:
+                # Live keeps running on what this thread does, so it has to outlive a bug here.
+                self._last_error = str(error)
+                log.exception("the recorder failed and will carry on")
+        deadline = time.monotonic() + DRAIN_S
+        while self._pending and time.monotonic() < deadline:
             before = len(self._pending)
             self.flush()
+            if len(self._pending) == before:
+                time.sleep(0.5)
+        if self._pending:
+            log.error("stopping with %d reports unwritten", len(self._pending))
 
 
 def gaps(

@@ -3,14 +3,7 @@
 import { useActionState } from "react";
 import { signIn } from "@/app/auth";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
@@ -21,7 +14,6 @@ export default function SignIn() {
     <Card className="w-full max-w-sm">
       <CardHeader>
         <CardTitle>Lummi Vessel Tracker</CardTitle>
-        <CardDescription>Vessels in Lummi waters, for the Nation&apos;s staff.</CardDescription>
       </CardHeader>
       <CardContent>
         <form action={action} className="space-y-4">
@@ -49,7 +41,7 @@ export default function SignIn() {
       </CardContent>
       <CardFooter>
         <p className="text-sm text-muted-foreground">
-          Accounts are issued by the Lummi Nation. Ask your administrator for access.
+          Demo sign-in: any username and the team password.
         </p>
       </CardFooter>
     </Card>

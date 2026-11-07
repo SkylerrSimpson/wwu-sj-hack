@@ -54,14 +54,14 @@ export default function SidePanel({
             <Button
               size="icon-sm"
               variant="ghost"
-              aria-label="Show the column"
+              aria-label="Show panel"
               onClick={() => onCollapse(false)}
             />
           }
         >
           <PanelLeftOpen />
         </TooltipTrigger>
-        <TooltipContent side="right">Show the column</TooltipContent>
+        <TooltipContent side="right">Show panel</TooltipContent>
       </Tooltip>
     </div>
   );
@@ -93,14 +93,14 @@ export default function SidePanel({
                 <Button
                   size="icon-sm"
                   variant="ghost"
-                  aria-label="Hide the column"
+                  aria-label="Hide panel"
                   onClick={() => onCollapse(true)}
                 />
               }
             >
               <PanelLeftClose />
             </TooltipTrigger>
-            <TooltipContent side="bottom">Hide the column</TooltipContent>
+            <TooltipContent side="bottom">Hide panel</TooltipContent>
           </Tooltip>
         </div>
         {TABS.map(([key]) => (

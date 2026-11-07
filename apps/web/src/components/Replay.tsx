@@ -23,6 +23,7 @@ import { labelOf, listsFor, type Config } from "@/lib/config";
 import type { Data, Vessel } from "@/lib/data";
 import { merge, parseRecord, toVessel } from "@/lib/live";
 import { RADAR_RANGE_M, RADAR_SITES } from "@/lib/radar";
+import { callsignText } from "@/lib/privacy";
 import { STATUS_WORD, type ShipStatus } from "@/lib/status";
 import {
   inLummiWaters,
@@ -41,7 +42,7 @@ const COVERAGE: Coverage[] = RADAR_SITES.map((s) => ({ ...s, rangeM: RADAR_RANGE
 const STREAMER = process.env.NEXT_PUBLIC_STREAMER_URL ?? "http://127.0.0.1:8787";
 const BANNER = "Approved list invented for this demo; no vessel shown is suspected of anything.";
 const CAVEAT =
-  "Most fishing and recreational boats under 65 ft don't carry AIS; no alert does not mean no unapproved boat was there. Approximate boundary, not a legal boundary.";
+  "Most fishing and recreational boats under 65 ft don't carry AIS, so a boat without AIS can enter with no alert. Approximate boundary, not a legal boundary.";
 
 type Mode = "replay" | "live";
 type Feed = { status: string; last_message_age_s: number | null };
@@ -55,6 +56,15 @@ const clock = new Intl.DateTimeFormat("en-US", {
   minute: "2-digit",
   timeZoneName: "short",
 });
+// The recording's window is whole UTC days, so its dates read in UTC.
+const dayUtc = new Intl.DateTimeFormat("en-US", {
+  timeZone: "UTC",
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+});
+// "2026-11-07" to "Nov 7, 2026"
+const dayLong = (iso: string) => dayUtc.format(Date.parse(`${iso}T00:00:00Z`));
 
 // The tracks are 4 MB, so the page fetches the static file instead of embedding it in the HTML.
 export default function Replay() {
@@ -185,6 +195,8 @@ function ReplayView({ data }: { data: Data }) {
   const rows = summary(inLummiWaters(vessels, data.boundary.ring, at, lists), (v) =>
     labelOf(v, config),
   );
+  const inWater = rows.reduce((n, r) => n + r.count, 0);
+  const retrieved = [...new Set(data.sources.map((s) => s.retrieved))];
   const paths: Path[] = showPaths
     ? vessels.map((v) => ({
         id: v.id,
@@ -238,15 +250,15 @@ function ReplayView({ data }: { data: Data }) {
     <div className="space-y-3 text-sm">
       <p className="text-xs text-muted-foreground">
         {mode === "live"
-          ? "Live AIS from AISStream through the streamer. Only vessels transmitting AIS and heard by this feed appear; no vessel heard does not mean no vessel present."
-          : `Recorded AIS, ${data.window.start.slice(0, 10)} to ${data.window.end.slice(0, 10)} (UTC).`}{" "}
-        {ships.length} vessels transmitting now.
+          ? "Live AIS from AISStream through the streamer. Only vessels transmitting AIS and heard by this feed appear; a vessel can be there without being heard."
+          : `Recorded AIS, ${dayUtc.format(Date.parse(data.window.start))} to ${dayUtc.format(Date.parse(data.window.end))}.`}{" "}
+        {ships.length} vessels on the map, {inWater} in Lummi waters.
       </p>
       <Table>
         <TableHeader>
           <TableRow>
             <TableHead>Status</TableHead>
-            <TableHead>Kind</TableHead>
+            <TableHead>Type</TableHead>
             <TableHead className="text-right">Count</TableHead>
           </TableRow>
         </TableHeader>
@@ -303,15 +315,31 @@ function ReplayView({ data }: { data: Data }) {
     <div className="space-y-2">
       <p className="text-xs text-muted-foreground">{CAVEAT}</p>
       <p className="text-xs text-muted-foreground">
-        Data:{" "}
-        {data.sources.map((s) => (
-          <span key={s.id}>
-            <a className="underline" href={s.url}>
-              {s.name}
-            </a>
-            , retrieved <time dateTime={s.retrieved}>{s.retrieved}</time>.{" "}
-          </span>
-        ))}
+        {retrieved.length === 1 ? (
+          <>
+            Data, retrieved <time dateTime={retrieved[0]}>{dayLong(retrieved[0] ?? "")}</time>:{" "}
+            {data.sources.map((s, i) => (
+              <span key={s.id}>
+                {i > 0 && " · "}
+                <a className="underline" href={s.url}>
+                  {s.name}
+                </a>
+              </span>
+            ))}
+          </>
+        ) : (
+          <>
+            Data:{" "}
+            {data.sources.map((s) => (
+              <span key={s.id}>
+                <a className="underline" href={s.url}>
+                  {s.name}
+                </a>
+                , retrieved <time dateTime={s.retrieved}>{dayLong(s.retrieved)}</time>.{" "}
+              </span>
+            ))}
+          </>
+        )}
       </p>
     </div>
   );
@@ -376,7 +404,7 @@ function ReplayView({ data }: { data: Data }) {
         {picked.length_m ? `, ${picked.length_m} m` : ""}
       </dd>
       <dt className="text-muted-foreground">Call sign</dt>
-      <dd>{picked.callsign || "not broadcast"}</dd>
+      <dd>{callsignText(picked.type, picked.callsign)}</dd>
       <dt className="text-muted-foreground">Fleet</dt>
       <dd>{labelOf(picked, config)}</dd>
       <dt className="text-muted-foreground">AIS id</dt>
@@ -437,7 +465,7 @@ function ReplayView({ data }: { data: Data }) {
       <SidePanel
         className={`absolute top-[76px] bottom-0 left-0 z-20${overlay ? "" : " hidden"}`}
         panes={{ water, lists: listsPane, alerts: <AlertPanel entries={entries} />, vessel }}
-        counts={{ water: rows.reduce((n, r) => n + r.count, 0), alerts: entries.length }}
+        counts={{ water: inWater, alerts: entries.length }}
         collapsed={collapsed}
         onCollapse={setCollapsed}
         footer={footer}

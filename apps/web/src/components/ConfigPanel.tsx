@@ -124,8 +124,7 @@ export default function ConfigPanel({
         <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">
             A vessel whose call sign or name has one of these as a whole word is approved and never
-            alerts. Tribal codes live in call signs; matching them against names would approve the
-            wrong boats.
+            alerts.
           </p>
           <Table>
             <TableHeader>
@@ -203,7 +202,7 @@ export default function ConfigPanel({
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="space-y-1">
-            <Label htmlFor="vessel-select">Vessel (or click a dot on the map)</Label>
+            <Label htmlFor="vessel-select">Vessel</Label>
             <select
               id="vessel-select"
               className={selectClass}
@@ -268,7 +267,7 @@ export default function ConfigPanel({
               </Button>
             </div>
           </div>
-          {idTable("priority", "No vessels approved by id yet.")}
+          {idTable("priority", "No vessels added yet.")}
         </CardContent>
       </Card>
 
@@ -283,7 +282,7 @@ export default function ConfigPanel({
           <p className="text-sm text-muted-foreground">
             You are alerted each time one of these enters Lummi waters.
           </p>
-          {idTable("watch", "The watch list is empty.")}
+          {idTable("watch", 'No vessels added yet. Use "Add to watch list" above.')}
         </CardContent>
       </Card>
     </div>

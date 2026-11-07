@@ -32,7 +32,7 @@ export default function AlertPanel({ entries }: { entries: Entry[] }) {
 
   const send = (key: string, entry: Entry) => {
     if (!email) {
-      setLog((l) => [...l, { key, entry, result: "No email saved" }]);
+      setLog((l) => [...l, { key, entry, result: "not sent, no email saved" }]);
       return;
     }
     startTransition(async () => {
@@ -98,7 +98,7 @@ export default function AlertPanel({ entries }: { entries: Entry[] }) {
               className="animate-in fade-in slide-in-from-bottom-1 duration-300 motion-reduce:animate-none"
             >
               {pacific.format(a.entry.t * 1000)}: {a.entry.name},{" "}
-              {a.entry.status === "watch" ? "watch list" : "suspicious"}, {a.result}
+              {a.entry.status === "watch" ? "watch list" : "suspicious"}: {a.result}
             </li>
           ))}
         </ol>

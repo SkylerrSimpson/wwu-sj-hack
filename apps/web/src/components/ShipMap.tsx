@@ -2,6 +2,7 @@
 
 import * as L from "leaflet";
 import { useEffect, useRef } from "react";
+import { callsignText } from "@/lib/privacy";
 import { STATUS_WORD, type ShipStatus } from "@/lib/status";
 
 export type Ship = {
@@ -148,7 +149,7 @@ export default function ShipMap({
           `<strong>${s.name}</strong>`,
           `${s.type}${s.lengthM ? `, ${s.lengthM} m` : ""}`,
           `Status: ${STATUS_WORD[s.status]}`,
-          `Call sign: ${s.callsign || "not broadcast"}`,
+          `Call sign: ${callsignText(s.type, s.callsign)}`,
           `AIS id: ${s.id}`,
         ].join("<br>"),
       );

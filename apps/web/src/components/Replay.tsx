@@ -19,9 +19,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { Coverage, Path, Ship } from "@/components/ShipMap";
-import { labelOf, listsFor, type Config } from "@/lib/config";
+import { labelOf, listsFor, moveTo } from "@/lib/config";
 import type { Data, Vessel } from "@/lib/data";
-import { merge, parseRecord, toVessel } from "@/lib/live";
+import { merge, parseRecord } from "@/lib/live";
 import { RADAR_RANGE_M, RADAR_SITES } from "@/lib/radar";
 import { callsignText } from "@/lib/privacy";
 import { STATUS_WORD, type ShipStatus } from "@/lib/status";
@@ -30,7 +30,7 @@ import {
   newEntries,
   positionAt,
   summary,
-  vesselStatus,
+  shownStatus,
   type Entry,
 } from "@/lib/vessel";
 
@@ -128,12 +128,15 @@ function ReplayView({ data }: { data: Data }) {
     };
     es.addEventListener("snapshot", (e) => {
       const p = parse(e) as { feed?: Feed; vessels?: unknown[] } | null;
-      const next = new Map<string, Vessel>();
-      for (const x of p?.vessels ?? []) {
-        const r = parseRecord(x);
-        if (r) next.set(r.id, toVessel(r));
-      }
-      setLive(next);
+      // A snapshot after a reconnect merges into what is held, so tracks survive the gap.
+      setLive((held) => {
+        let next = held;
+        for (const x of p?.vessels ?? []) {
+          const r = parseRecord(x);
+          if (r) next = merge(next, r);
+        }
+        return next;
+      });
       if (p?.feed) setFeed(p.feed);
     });
     es.addEventListener("vessel", (e) => {
@@ -185,25 +188,28 @@ function ReplayView({ data }: { data: Data }) {
     });
   }, [at, mode, vessels, data.boundary.ring, lists]);
 
-  const suspicious = new Set(
-    entries.filter((e) => e.status === "suspicious").map((e) => e.vesselId),
+  const suspicious = useMemo(
+    () => new Set(entries.filter((e) => e.status === "suspicious").map((e) => e.vesselId)),
+    [entries],
   );
-  const statusOf = (v: Vessel): ShipStatus => {
-    const s = vesselStatus(v, lists);
-    return s === "unlisted" && suspicious.has(v.id) ? "suspicious" : s;
-  };
-  const rows = summary(inLummiWaters(vessels, data.boundary.ring, at, lists), (v) =>
+  const statusOf = (v: Vessel): ShipStatus => shownStatus(v, lists, suspicious);
+  const rows = summary(inLummiWaters(vessels, data.boundary.ring, at, lists, suspicious), (v) =>
     labelOf(v, config),
   );
   const inWater = rows.reduce((n, r) => n + r.count, 0);
   const retrieved = [...new Set(data.sources.map((s) => s.retrieved))];
-  const paths: Path[] = showPaths
-    ? vessels.map((v) => ({
-        id: v.id,
-        status: statusOf(v),
-        latLngs: v.track.map(([, lon = 0, lat = 0]) => [lat, lon]),
-      }))
-    : [];
+  // Rebuilt only when something that changes a path changes, not on every tick.
+  const paths = useMemo<Path[]>(
+    () =>
+      showPaths
+        ? vessels.map((v) => ({
+            id: v.id,
+            status: shownStatus(v, lists, suspicious),
+            latLngs: v.track.map(([, lon = 0, lat = 0]) => [lat, lon]),
+          }))
+        : [],
+    [showPaths, vessels, lists, suspicious],
+  );
   const picked = vessels.find((v) => v.id === selected);
   const pickedPos = picked ? positionAt(picked.track, at) : null;
   const ships: Ship[] = vessels.flatMap((v) => {
@@ -224,18 +230,8 @@ function ReplayView({ data }: { data: Data }) {
       : [];
   });
 
-  // Moving a vessel onto one list takes it off the other.
-  const putOn = (list: "priority" | "watch" | null, id: string) => {
-    const next: Config = {
-      patterns: config.patterns,
-      priority: new Set(config.priority),
-      watch: new Set(config.watch),
-    };
-    next.priority.delete(id);
-    next.watch.delete(id);
-    if (list) next[list].add(id);
-    setConfig(next);
-  };
+  const putOn = (list: "priority" | "watch" | null, id: string) =>
+    setConfig(moveTo(config, list, id));
   const onPriorityList = picked ? config.priority.has(picked.id) : false;
   const onWatchList = picked ? config.watch.has(picked.id) : false;
 
@@ -443,7 +439,10 @@ function ReplayView({ data }: { data: Data }) {
           setPlaying(false);
         }}
         playing={playing}
-        onPlay={() => setPlaying((p) => !p)}
+        onPlay={() => {
+          if (!playing && t >= end) setT(start + 1800);
+          setPlaying((p) => !p);
+        }}
         speed={speed}
         speeds={SPEEDS}
         onSpeed={setSpeed}

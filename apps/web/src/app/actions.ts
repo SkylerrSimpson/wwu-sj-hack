@@ -1,5 +1,6 @@
 "use server";
 
+import { cookies } from "next/headers";
 import { Resend } from "resend";
 import type { Entry } from "@/lib/vessel";
 
@@ -19,6 +20,15 @@ export async function sendAlert(
   to: string,
   entry: Entry,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  // Server functions answer direct POSTs too, so the sign-in cookie is checked here as well.
+  if (!(await cookies()).has("lvt")) return { ok: false, error: "Sign in to send alerts" };
+  if (
+    ![entry.t, entry.lat, entry.lon].every(Number.isFinite) ||
+    Math.abs(entry.lat) > 90 ||
+    Math.abs(entry.lon) > 180
+  )
+    return { ok: false, error: "The entry has no valid time or position" };
+  const name = entry.name.slice(0, 80);
   const address = to.trim();
   if (address.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address))
     return { ok: false, error: "Enter a valid email address" };
@@ -31,7 +41,7 @@ export async function sendAlert(
       from: "Lummi Vessel Tracker <onboarding@resend.dev>",
       to: address,
       subject: watch ? "Lummi waters: watch-list vessel entered" : "Lummi waters: vessel entered",
-      text: `A vessel ${watch ? "on your watch list" : "not on the approved list"} entered Lummi waters: ${entry.name}, ${pacific.format(entry.t * 1000)}, ${where}. Self-reported AIS: corroborate before acting.`,
+      text: `A vessel ${watch ? "on your watch list" : "not on the approved list"} entered Lummi waters: ${name}, ${pacific.format(entry.t * 1000)}, ${where}. Self-reported AIS: corroborate before acting.`,
     });
     return error ? { ok: false, error: error.message } : { ok: true };
   } catch (e) {

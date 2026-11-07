@@ -43,10 +43,10 @@ def test_a_missing_salt_gets_a_random_one() -> None:
     assert load({"AIS_API_KEY": "k"}).id_salt != load({"AIS_API_KEY": "k"}).id_salt
 
 
-def test_the_archive_path_is_optional() -> None:
+def test_the_archive_path_is_optional(tmp_path: Path) -> None:
     assert load({"AIS_API_KEY": "k"}).db_path is None
-    assert load({"AIS_API_KEY": "k", "STREAMER_DB": "/var/lib/x/ais.db"}).db_path == (
-        "/var/lib/x/ais.db"
+    assert load({"AIS_API_KEY": "k", "STREAMER_DB": str(tmp_path / "x" / "ais.db")}).db_path == str(
+        tmp_path / "x" / "ais.db"
     )
 
 

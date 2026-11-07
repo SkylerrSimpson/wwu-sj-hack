@@ -7,6 +7,10 @@ import { sendAlert } from "./actions";
 const send = vi.hoisted(() =>
   vi.fn<(mail: CreateEmailOptions) => Promise<{ error: { message: string } | null }>>(),
 );
+const signedIn = vi.hoisted(() => ({ value: true }));
+vi.mock("next/headers", () => ({
+  cookies: async () => ({ has: (name: string) => name === "lvt" && signedIn.value }),
+}));
 vi.mock("resend", () => ({
   Resend: class {
     emails = { send };
@@ -27,6 +31,7 @@ beforeEach(() => {
   send.mockReset();
   send.mockResolvedValue({ error: null });
   process.env.RESEND_API_KEY = "re_test";
+  signedIn.value = true;
 });
 
 test("a bad address is refused on the server and nothing is sent", async () => {
@@ -79,4 +84,24 @@ test("a network failure comes back as the result too", async () => {
     ok: false,
     error: "fetch failed",
   });
+});
+
+test("a caller without the sign-in cookie is refused and nothing is sent", async () => {
+  signedIn.value = false;
+  expect(await sendAlert("staff@example.org", entry)).toEqual({
+    ok: false,
+    error: "Sign in to send alerts",
+  });
+  expect(send).not.toHaveBeenCalled();
+});
+
+test("an entry with an impossible position is refused and a long name is cut to 80 characters", async () => {
+  expect(await sendAlert("staff@example.org", { ...entry, lat: 123 })).toEqual({
+    ok: false,
+    error: "The entry has no valid time or position",
+  });
+  await sendAlert("staff@example.org", { ...entry, name: "x".repeat(200) });
+  const mail = send.mock.calls[0]?.[0];
+  expect(String(mail?.text)).toContain("x".repeat(80) + ",");
+  expect(String(mail?.text)).not.toContain("x".repeat(81));
 });

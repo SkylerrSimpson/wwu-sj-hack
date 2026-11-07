@@ -23,5 +23,3 @@ export type Data = {
 };
 
 export const data: Data = raw;
-
-export const sourceOf = (id: string): Source | undefined => data.sources.find((s) => s.id === id);

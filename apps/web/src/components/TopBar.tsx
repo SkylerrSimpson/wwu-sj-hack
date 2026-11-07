@@ -41,14 +41,19 @@ const selectClass =
 export default function TopBar(p: TopBarProps) {
   if (!p.overlayShown)
     return (
-      <Button
-        size="sm"
-        variant="outline"
-        className={`fixed top-3 right-3 ${Z}`}
-        onClick={p.onToggleOverlay}
-      >
-        <Eye /> Show controls
-      </Button>
+      <>
+        <p className={`fixed inset-x-0 top-0 ${Z} bg-amber-100 px-3 py-1 text-xs text-amber-900`}>
+          {p.banner}
+        </p>
+        <Button
+          size="sm"
+          variant="outline"
+          className={`fixed top-8 right-3 ${Z}`}
+          onClick={p.onToggleOverlay}
+        >
+          <Eye /> Show controls
+        </Button>
+      </>
     );
   const replay = p.mode === "replay";
   return (
@@ -135,9 +140,7 @@ export default function TopBar(p: TopBarProps) {
           ) : (
             <span className="flex-1 truncate text-sm text-muted-foreground">{p.feedText}</span>
           )}
-          <span className="font-mono text-sm tabular-nums whitespace-nowrap" aria-live="polite">
-            {p.clockText}
-          </span>
+          <span className="font-mono text-sm tabular-nums whitespace-nowrap">{p.clockText}</span>
         </div>
 
         <div className="flex items-center gap-3">

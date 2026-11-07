@@ -61,10 +61,12 @@ Shared state: the configuration and the alert email live in local storage; `comp
 
 Modules (unchanged from the MVP):
 
-- `components/Replay.tsx`: client; owns the clock, the mode, the configuration, the selection, the entries and the overlay visibility; composes `TopBar`, `ShipMap`, `SidePanel`, `ConfigPanel` (quick actions) and `AlertPanel`.
-- `components/ShipMap.tsx`: client; `{ ring, ships, paths, selectedId, onSelect, className }`; Leaflet on a canvas renderer; dots moved in place; a popup on click.
+- `components/Replay.tsx`: client; owns the clock, the mode, the configuration, the selection, the entries and the overlay visibility; composes `TopBar`, `ShipMap`, `SidePanel` and `AlertPanel`; the Lists tab's Approve and Watch buttons call `lib/config`'s `moveTo`.
+- `components/ShipMap.tsx`: client; `{ ring, ships, paths, coverage, selectedId, onSelect, className }`; Leaflet on a canvas renderer; dots moved in place; a popup on click.
 - `components/TopBar.tsx` and `components/SidePanel.tsx`: props in, markup out, no state of their own except which tab is open.
-- `lib/vessel.ts`, `lib/config.ts`, `lib/live.ts`, `lib/data.ts`, `app/actions.ts`: as before.
+- `lib/vessel.ts`, `lib/config.ts`, `lib/live.ts`, `lib/data.ts`, `app/actions.ts`: as before, plus `vessel.shownStatus` (an unlisted vessel that crossed in shows as suspicious) and `config.moveTo` (one list at a time).
+- `lib/storage.ts`: `readConfig`, `writeConfig`, `readEmail`, `writeEmail` over a storage-like object, tested with a fake; the two hooks wrap them.
+- `lib/status.ts`: the word shown for each status (`priority` is shown as "approved").
 - `lib/radar.ts`: four proposed shore radar sites and a range, drawn as dashed circles when the Radar switch is on; labelled "Proposed radar" on the map, because they are hypothetical.
 
 ## Look

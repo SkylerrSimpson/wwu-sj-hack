@@ -1,6 +1,7 @@
 "use client";
 
 import { startTransition, useEffect, useRef, useState } from "react";
+import { useAlertEmail } from "@/components/useAlertEmail";
 import { sendAlert } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,18 +18,9 @@ const pacific = new Intl.DateTimeFormat("en-US", {
 });
 
 export default function AlertPanel({ entries }: { entries: Entry[] }) {
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useAlertEmail();
   const [log, setLog] = useState<Attempt[]>([]);
   const seen = useRef(new Set<string>());
-
-  // Loaded after mount, not in the initial state, so the server and first client render agree.
-  useEffect(() => {
-    try {
-      setEmail(localStorage.getItem("alertEmail") ?? "");
-    } catch {
-      // No storage (private mode): the address lasts for this page view.
-    }
-  }, []);
 
   const send = (key: string, entry: Entry) => {
     if (!email) {
@@ -36,8 +28,13 @@ export default function AlertPanel({ entries }: { entries: Entry[] }) {
       return;
     }
     startTransition(async () => {
-      const r = await sendAlert(email, entry);
-      setLog((l) => [...l, { key, entry, result: r.ok ? "sent" : r.error }]);
+      try {
+        const r = await sendAlert(email, entry);
+        setLog((l) => [...l, { key, entry, result: r.ok ? "sent" : r.error }]);
+      } catch (e) {
+        const why = e instanceof Error ? e.message : String(e);
+        setLog((l) => [...l, { key, entry, result: `Could not reach the server: ${why}` }]);
+      }
     });
   };
 
@@ -63,14 +60,7 @@ export default function AlertPanel({ entries }: { entries: Entry[] }) {
             type="email"
             autoComplete="email"
             value={email}
-            onChange={(e) => {
-              setEmail(e.target.value);
-              try {
-                localStorage.setItem("alertEmail", e.target.value);
-              } catch {
-                // Same: without storage the address is kept in state only.
-              }
-            }}
+            onChange={(e) => setEmail(e.target.value)}
           />
           <Button
             variant="outline"

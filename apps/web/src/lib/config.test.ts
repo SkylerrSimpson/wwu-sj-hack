@@ -5,6 +5,7 @@ import {
   labelOf,
   listsFor,
   matchedPattern,
+  moveTo,
   parseConfig,
   serializeConfig,
   type Config,
@@ -131,4 +132,13 @@ test("a call-sign pattern never matches a name: SUN does not approve the tug SUN
   expect(matchedPattern(spirit, [sun])).toBeNull();
   expect(matchedPattern(coded, [sun])).toEqual(sun);
   expect(matchedPattern(spirit, DEFAULT_CONFIG.patterns)).toBeNull();
+});
+
+test("moveTo puts a vessel on one list, takes it off the other, and null clears it", () => {
+  const start = { ...DEFAULT_CONFIG, priority: new Set(["a"]), watch: new Set(["b"]) };
+  const watched = moveTo(start, "watch", "a");
+  expect([...watched.priority]).toEqual([]);
+  expect([...watched.watch]).toEqual(["b", "a"]);
+  expect([...moveTo(watched, null, "a").watch]).toEqual(["b"]);
+  expect([...start.priority]).toEqual(["a"]);
 });

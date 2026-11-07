@@ -19,6 +19,13 @@ export type Path = { id: string; status: ShipStatus; latLngs: [number, number][]
 // A sensor site and the circle it covers
 export type Coverage = { id: string; name: string; lon: number; lat: number; rangeM: number };
 
+// Vessel names come from AIS and, in Live mode, from strangers; they never reach HTML unescaped.
+const escape = (text: string) =>
+  text.replace(
+    /[&<>"']/g,
+    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] ?? c,
+  );
+
 const STATUS_COLOR: Record<ShipStatus, string> = {
   priority: "#15803d",
   watch: "#b91c1c",
@@ -98,7 +105,7 @@ export default function ShipMap({
       // A text tag, not a dot, so a radar site is never mistaken for a boat.
       const tag = L.divIcon({
         className: "",
-        html: `<span class="inline-block -translate-x-1/2 -translate-y-1/2 rounded bg-purple-800 px-1 text-[10px] leading-4 whitespace-nowrap text-white">Proposed radar: ${c.name}</span>`,
+        html: `<span class="inline-block -translate-x-1/2 -translate-y-1/2 rounded bg-purple-800 px-1 text-[10px] leading-4 whitespace-nowrap text-white">Proposed radar: ${escape(c.name)}</span>`,
         iconSize: [0, 0],
       });
       L.marker([c.lat, c.lon], { icon: tag, keyboard: false, interactive: false }).addTo(layer);
@@ -143,14 +150,14 @@ export default function ShipMap({
         fillColor: STATUS_COLOR[s.status],
         radius: s.id === selectedId ? 8 : 5,
       });
-      marker.setTooltipContent(`${s.name} (${s.type}), ${STATUS_WORD[s.status]}`);
+      marker.setTooltipContent(`${escape(s.name)} (${escape(s.type)}), ${STATUS_WORD[s.status]}`);
       marker.setPopupContent(
         [
-          `<strong>${s.name}</strong>`,
-          `${s.type}${s.lengthM ? `, ${s.lengthM} m` : ""}`,
+          `<strong>${escape(s.name)}</strong>`,
+          `${escape(s.type)}${s.lengthM ? `, ${s.lengthM} m` : ""}`,
           `Status: ${STATUS_WORD[s.status]}`,
-          `Call sign: ${callsignText(s.type, s.callsign)}`,
-          `AIS id: ${s.id}`,
+          `Call sign: ${escape(callsignText(s.type, s.callsign))}`,
+          `AIS id: ${escape(s.id)}`,
         ].join("<br>"),
       );
     }

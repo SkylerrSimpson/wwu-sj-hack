@@ -40,6 +40,19 @@ export function matchedPattern(v: Vessel, patterns: Pattern[]): Pattern | null {
   return patterns.find((p) => p.text !== "" && words[p.field].has(p.text.toLowerCase())) ?? null;
 }
 
+// Moving a vessel onto one list takes it off the other; null takes it off both.
+export function moveTo(config: Config, list: "priority" | "watch" | null, id: string): Config {
+  const next = {
+    patterns: config.patterns,
+    priority: new Set(config.priority),
+    watch: new Set(config.watch),
+  };
+  next.priority.delete(id);
+  next.watch.delete(id);
+  if (list) next[list].add(id);
+  return next;
+}
+
 export function listsFor(vessels: Vessel[], config: Config): Lists {
   const priority = new Set(config.priority);
   for (const v of vessels) if (matchedPattern(v, config.patterns)) priority.add(v.id);

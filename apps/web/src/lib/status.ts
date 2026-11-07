@@ -1,6 +1,8 @@
-export type ShipStatus = "priority" | "watch" | "suspicious" | "unlisted";
+import type { Status } from "@/lib/vessel";
 
-export const STATUS_WORD: Record<ShipStatus, string> = {
+export type ShipStatus = Status;
+
+export const STATUS_WORD: Record<Status, string> = {
   // "approved" is the word Lummi Nation staff use; the code keeps `priority`.
   priority: "approved",
   watch: "watch list",

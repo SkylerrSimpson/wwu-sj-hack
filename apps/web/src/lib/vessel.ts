@@ -1,7 +1,7 @@
 import type { Vessel } from "@/lib/data";
 
 export type Lists = { priority: Set<string>; watch: Set<string> };
-export type Status = "priority" | "watch" | "unlisted";
+export type Status = "priority" | "watch" | "suspicious" | "unlisted";
 export type Entry = {
   vesselId: string;
   name: string;
@@ -15,6 +15,12 @@ export function vesselStatus(v: Vessel, lists: Lists): Status {
   if (lists.watch.has(v.id)) return "watch";
   if (v.priority || lists.priority.has(v.id)) return "priority";
   return "unlisted";
+}
+
+// What the screen shows: an unlisted vessel that has crossed in is suspicious until it is listed.
+export function shownStatus(v: Vessel, lists: Lists, crossed: ReadonlySet<string>): Status {
+  const s = vesselStatus(v, lists);
+  return s === "unlisted" && crossed.has(v.id) ? "suspicious" : s;
 }
 
 export function isInside(lon: number, lat: number, ring: number[][]): boolean {
@@ -75,19 +81,20 @@ export function inLummiWaters(
   ring: number[][],
   t: number,
   lists: Lists,
+  crossed: ReadonlySet<string> = new Set(),
 ): InWater[] {
   const out: InWater[] = [];
   for (const vessel of vessels) {
     const pos = positionAt(vessel.track, t);
     if (!pos || !isInside(pos[0], pos[1], ring)) continue;
-    out.push({ vessel, status: vesselStatus(vessel, lists), lon: pos[0], lat: pos[1] });
+    out.push({ vessel, status: shownStatus(vessel, lists, crossed), lon: pos[0], lat: pos[1] });
   }
   return out;
 }
 
 export type Row = { label: string; status: Status; count: number; names: string[] };
 
-const statusOrder: Record<Status, number> = { watch: 0, unlisted: 1, priority: 2 };
+const statusOrder: Record<Status, number> = { watch: 0, suspicious: 1, unlisted: 2, priority: 3 };
 
 export function summary(inWater: InWater[], labelOf: (v: Vessel) => string): Row[] {
   const rows: Row[] = [];

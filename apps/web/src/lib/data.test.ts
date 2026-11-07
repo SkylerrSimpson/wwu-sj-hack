@@ -1,13 +1,10 @@
 import { expect, test } from "vitest";
-import { data, sourceOf } from "./data";
+import { data } from "./data";
 
 test("every vessel and the boundary name a known source", () => {
-  for (const v of data.vessels) expect(sourceOf(v.source)?.id).toBe(v.source);
-  expect(sourceOf(data.boundary.source)?.id).toBe(data.boundary.source);
-});
-
-test("sourceOf is undefined for an unknown source", () => {
-  expect(sourceOf("nowhere")).toBeUndefined();
+  const ids = new Set(data.sources.map((s) => s.id));
+  for (const v of data.vessels) expect(ids.has(v.source)).toBe(true);
+  expect(ids.has(data.boundary.source)).toBe(true);
 });
 
 test("every track is [t, lon, lat] points in time order", () => {

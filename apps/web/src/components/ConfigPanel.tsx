@@ -14,7 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { Config, PatternField } from "@/lib/config";
+import { moveTo, type Config, type PatternField } from "@/lib/config";
 
 type Named = { id: string; name: string };
 type ListKey = "priority" | "watch";
@@ -52,6 +52,8 @@ export default function ConfigPanel({
     e.preventDefault();
     const t = text.trim();
     if (!t) return setPatternError("Type the text to match before adding.");
+    if (/\s/.test(t))
+      return setPatternError("A pattern is one word; names are matched word by word.");
     if (config.patterns.some((p) => p.text.toLowerCase() === t.toLowerCase()))
       return setPatternError(`"${t}" is already a pattern.`);
     const next = copy();
@@ -66,19 +68,8 @@ export default function ConfigPanel({
     next.patterns = next.patterns.filter((p) => p.text !== text);
     onChange(next);
   };
-  // Adding to one list removes from the other, so a vessel is never on both.
-  const addId = (to: ListKey, id: string) => {
-    const next = copy();
-    next.priority.delete(id);
-    next.watch.delete(id);
-    next[to].add(id);
-    onChange(next);
-  };
-  const removeId = (from: ListKey, id: string) => {
-    const next = copy();
-    next[from].delete(id);
-    onChange(next);
-  };
+  const addId = (to: ListKey, id: string) => onChange(moveTo(config, to, id));
+  const removeId = (_from: ListKey, id: string) => onChange(moveTo(config, null, id));
   const typed = typedId.trim();
 
   const idTable = (from: ListKey, empty: string) =>

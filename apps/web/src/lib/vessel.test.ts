@@ -4,6 +4,7 @@ import {
   inLummiWaters,
   isInside,
   newEntries,
+  shownStatus,
   positionAt,
   summary,
   vesselStatus,
@@ -206,3 +207,21 @@ test("over the whole recorded window only the synthetic vessel enters Lummi wate
   expect(ids.length).toBeGreaterThan(0);
   expect(new Set(ids)).toEqual(new Set(["demo"]));
 }, 20_000);
+
+test("shownStatus turns an unlisted vessel that crossed in into suspicious, and nothing else", () => {
+  const plain = vessel("a", []);
+  const ferry = vessel("ferry", [], true);
+  const crossed = new Set(["a", "ferry"]);
+  expect(shownStatus(plain, none, crossed)).toBe("suspicious");
+  expect(shownStatus(plain, none, new Set())).toBe("unlisted");
+  expect(shownStatus(ferry, none, crossed)).toBe("priority");
+  expect(shownStatus(plain, { priority: new Set(), watch: new Set(["a"]) }, crossed)).toBe("watch");
+});
+
+test("inLummiWaters and summary show a crossed vessel as suspicious, after the watch list", () => {
+  const a = vessel("a", [[9900, 0.5, 0.5]]);
+  const w = vessel("w", [[9900, 0.5, 0.5]]);
+  const lists: Lists = { priority: new Set(), watch: new Set(["w"]) };
+  const rows = summary(inLummiWaters([a, w], square, 10000, lists, new Set(["a"])), (v) => v.type);
+  expect(rows.map((r) => r.status)).toEqual(["watch", "suspicious"]);
+});

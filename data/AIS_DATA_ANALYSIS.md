@@ -1,6 +1,8 @@
 # AIS data analysis
 
-This document records what we learned from the bulk AIS sample. To choose front-end features, start with "What this data is", which describes each field, its common values and what it can support. The later sections list detailed facts, data problems and open questions.
+This document records what we learned from the bulk AIS sample. It supports a tool that shows its data and lets the user configure the rules. It reports facts and options, and the user makes the decisions.
+
+To choose front-end features, start with "What this data is", which describes each field, its common values and what it can support. "Lummi and other tribal vessels" and "Limits" follow it. The later sections list detailed facts, data problems and open questions.
 
 Written Nov 7, 2026. The app does not use this sample. The demo still uses the five December days in `data/raw/ais-2024-12-05-to-09.zip`.
 
@@ -105,7 +107,7 @@ The app shows a call sign only for public vessels. 741 of the 833 public vessels
 | `BLACKFISH`          | 5       | Passenger vessels                |
 | `FOSS`               | 4       | Tugs                             |
 
-The app's approved name patterns use text matching, so they can already use these words. Short text can match the wrong vessel. For example, `CG` also matches the name `CMA CGM`.
+The app's approved name patterns can already use these words. A pattern must match a whole word in the name or call sign, without regard to case. Spaces, `/` and `-` separate words, so `CG` does not match `CMA CGM`, and `XWL` matches `WN-123-XWL` but not `WN123XWL`. The settings page says "contains", but the matcher uses whole words.
 
 ### Flags
 
@@ -235,23 +237,26 @@ Public vessels of 20 m or more that appear on 10 or more days:
 | Width, draft, IMO, cargo  | Yes         | No                      | No                          |
 | Destination, arrival time | No          | No                      | No                          |
 
-The replay can calculate speed from two positions in `track`. A new `data.json` field needs a schema issue, as `data/AGENTS.md` states. The AIS standard includes destination and arrival time in its static message. We did not check whether this feed delivers them.
+The replay can calculate speed from two positions in `track`. A new `data.json` field needs a schema issue, as `data/AGENTS.md` states. AIS Message 5, from Class A devices, carries destination, arrival time and draft. Message 24, from Class B devices, does not. The streamer does not read these fields, and we did not check whether this feed delivers them.
+
+The streamer can also record reports to a database. It has these history endpoints: `/v1/history`, `/v1/track`, `/v1/reports`, `/v1/catalog`, `/v1/density`, `/v1/activity` and `/v1/coverage`. The database stores real names, call signs and MMSIs for private vessels, so it must stay out of the repo. We did not audit what each endpoint returns for private vessels.
 
 ### What the data can support
 
 These are options, not decisions. Each one links a user need to a fact in this document.
 
-| User need                          | Field               | Why the data supports it                                  | Limit                                                               |
-| ---------------------------------- | ------------------- | --------------------------------------------------------- | ------------------------------------------------------------------- |
-| Find one known vessel              | Call sign, name, ID | Call signs are almost unique, and few public names repeat | Public vessels only                                                 |
-| See only certain kinds of boat     | Type                | 99% of vessels have a type                                | The "Other" group holds 138 vessels, and types can be wrong         |
-| Remove parked boats from view      | Speed               | About 4 of 105 vessels on the map are moving              | The replay must calculate speed                                     |
-| Filter by size                     | Length              | 93% have a length, and private vessels can use it too     | 7% have no length                                                   |
-| Group vessels by operator          | Name text           | Names such as `WSF` and `SEASPAN` repeat                  | We did not verify owners, and short text can match the wrong vessel |
-| Separate foreign ships             | Flag from MMSI      | Most cargo ships and tankers have a foreign flag          | Needs a new field for private vessels, and shows registration only  |
-| Tell regular vessels from visitors | ID over time        | 121 of about 240 public vessels appear on only one day    | Needs stored history, and the streamer has none                     |
-| Judge how current a dot is         | `heard_at`          | Rows arrive about 1 to 3 minutes apart                    | Live feed only                                                      |
-| See warnings about bad data        | `flags`             | Impossible moves and unusual IDs exist in the data        | Live feed only, and a warning is not proof                          |
+| User need                                      | Field                   | Why the data supports it                                    | Limit                                                               |
+| ---------------------------------------------- | ----------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------- |
+| Find one known vessel                          | Call sign, name, ID     | Call signs are almost unique, and few public names repeat   | Public vessels only                                                 |
+| See only certain kinds of boat                 | Type                    | 99% of vessels have a type                                  | The "Other" group holds 138 vessels, and types can be wrong         |
+| Remove parked boats from view                  | Speed                   | About 4 of 105 vessels on the map are moving                | The replay must calculate speed                                     |
+| Filter by size                                 | Length                  | 93% have a length, and private vessels can use it too       | 7% have no length                                                   |
+| Filter by Lummi, other tribal, agency or other | Label from the settings | The app already gives each vessel a label from its settings | Tribal groups start empty. See "Lummi and other tribal vessels"     |
+| Group vessels by operator                      | Name text               | Names such as `WSF` and `SEASPAN` repeat                    | We did not verify owners, and a pattern reaches public vessels only |
+| Separate foreign ships                         | Flag from MMSI          | Most cargo ships and tankers have a foreign flag            | Needs a new field for private vessels, and shows registration only  |
+| Tell regular vessels from visitors             | ID over time            | 121 of about 240 public vessels appear on only one day      | Needs the streamer's history database                               |
+| Judge how current a dot is                     | `heard_at`              | Rows arrive about 1 to 3 minutes apart                      | Live feed only                                                      |
+| See warnings about bad data                    | `flags`                 | Impossible moves and unusual IDs exist in the data          | Live feed only, and a warning is not proof                          |
 
 The data does not support these features today:
 
@@ -265,6 +270,107 @@ The data does not support these features today:
 | Filter by width, draft or IMO              | Neither the replay nor the live feed has these fields.                                                            |
 
 The map popup says "Call sign: not broadcast" for every vessel with an empty call sign. For private vessels, this text is not accurate: most of them broadcast a call sign, and the app hides it.
+
+### Lummi and other tribal vessels
+
+**The registration number**
+
+- A Lummi representative gave the team the table below. It lists the suffix of each tribe's WN vessel registration number.
+- [Washington's rule](https://app.leg.wa.gov/wac/default.aspx?cite=308-93&full=true) (WAC 308-93-730) gives each tribe a block of numbers with a unique 3-letter suffix. It requires the number on the vessel.
+- [Lummi's natural resources code](https://www.lummi-nsn.gov/userfiles/1_Title%2010%20Natural%20Resources%20Code.pdf) (Title 10, section 10.05.030, 2008 edition) sets the Lummi format: `WN`, 3 digits and `XWL`. The number must be on both sides of the bow, in block letters at least 3 inches high. Documented vessels can follow Coast Guard display practice.
+- WAC 308-93-710 names 21 tribes. The table does not include the Muckleshoot, Nisqually, Puyallup, Upper Skagit or Yakama tribes.
+
+The "Matches" column counts vessels with the code as a whole word in a name or call sign. The count is a snapshot of the streamer database, with about 36 NOAA days and 10 minutes of live data. The import was still running.
+
+| Code  | Tribe                       | Matches                                    |
+| ----- | --------------------------- | ------------------------------------------ |
+| `XWL` | Lummi Nation                | 0                                          |
+| `HOH` | Hoh Tribe                   | 0                                          |
+| `JST` | Jamestown S'Klallam Tribe   | 0                                          |
+| `KWA` | Quinault Nation             | 0                                          |
+| `KWL` | Quileute Nation             | 0                                          |
+| `LEK` | Lower Elwha Klallam Tribe   | 0                                          |
+| `MKH` | Makah Tribe                 | 0                                          |
+| `NKK` | Nooksack Tribe              | 0                                          |
+| `PGK` | Port Gamble S'Klallam Tribe | 0                                          |
+| `SKK` | Skokomish Tribe             | 0                                          |
+| `SST` | Sauk-Suiattle Tribe         | 2 tugs                                     |
+| `STL` | Stillaguamish Tribe         | 0                                          |
+| `SUN` | Suquamish Tribe             | 9: 5 pleasure, 2 sailing, 1 tug, 1 fishing |
+| `SWN` | Swinomish Tribe             | 0                                          |
+| `SXN` | Squaxin Island Tribe        | 0                                          |
+| `TUL` | Tulalip Tribe               | 0                                          |
+
+We did not check who owns the `SST` and `SUN` matches. `SUN` is also an ordinary word, so a match does not show tribal ownership.
+
+**What AIS carries**
+
+- AIS has no field for a registration number. Message 5 and Message 24 carry the MMSI, name, call sign, ship type and dimensions. Message 5 also carries the IMO number.
+- The name field holds 20 characters and the call sign field holds 7 characters, so `WN 123 XWL` fits in the name field. No source we read states that an operator may enter it there.
+- No vessel in the sample has a name or call sign in the form `WN`, digits and a 3-letter suffix.
+- One fishing vessel has a state-style WN number, with a 2-letter suffix, in its name. An operator therefore can enter a registration number in that field.
+- 8 pleasure craft have call signs that start with `WN`, with no 3-letter suffix. We do not read these as registration numbers.
+- NOAA can replace a broadcast name from AVID, so the NOAA sample may hide a number that a vessel broadcast. The live data has no matches, but it covers only about 10 minutes.
+
+**How the app labels a vessel today**
+
+The app takes the first of these rules that applies:
+
+1. `fleet`, a value set at build time. The replay sets it for two vessels. The live feed never sets it.
+2. The label of the first matching pattern. The defaults are `XWL`, `WSF`, `SWN` and `NKK`.
+3. "Approved by the Nation", if the vessel's ID is on the approved list.
+4. The vessel's type.
+
+- The map has no filter or search yet.
+- The default patterns cannot match a private vessel, because the app receives only its type and length. A user pattern such as `pleasure` or `24` can match those generated names.
+- A user can select any dot and approve it. The approval stays in that browser.
+- A replay ID stays the same until a rebuild with different data. A live ID stays the same across restarts only if `STREAMER_ID_SALT` is set.
+- Replay and live IDs differ, so an approval in one mode does not apply in the other.
+
+**Ways to fill a tribal group**
+
+| Method                                                | Reaches private vessels | Limit                                                                                                     |
+| ----------------------------------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------- |
+| User approves a vessel on the map                     | Yes                     | The user must already know the boat. It stays in one browser                                              |
+| User enters or imports a list of MMSIs                | Yes, if built           | The app has no import yet. The user must hold the list                                                    |
+| Pattern in the browser                                | No                      | Matches public vessels only. `XWL` has 0 matches today                                                    |
+| Pattern in the streamer, before it hides the identity | Yes, if built           | Not built. It finds a boat only if the operator entered the code. It also labels a private boat in public |
+
+Until a user adds vessels, the Lummi group holds 0 vessels. This count does not show that no Lummi boats are present. Lummi boats can appear under "Other" or under their type.
+
+### Fishery notices
+
+The Nation publishes a [fishery hotline message](https://www.lummi-nsn.gov/widgets/FisheryHotline_pdf.php). We read message #2026-087, recorded Nov 5, 2026.
+
+- The message states: "All fisheries and areas are closed unless specifically opened."
+- It lists open and closed areas, with hours, as plain text. For example, it lists Bellingham Bay as closed to shellfish harvest.
+- It states that vessels in the Lummi fisheries must have the registration number on the hull and the registration card on board.
+- The app can link to this message and show its date. The PDF has no published format, so automatic reading of the areas can fail when the text changes.
+- We found only the current message, not past messages.
+
+[WDFW's agreed fisheries summaries](https://wdfw.wa.gov/fishing/management/north-falcon/summaries) are PDF files. [WDFW's emergency rules](https://wdfw.wa.gov/fishing/regulations/emergency-rules/search) are web pages with no feed.
+
+## Limits
+
+### Limits that no research can remove
+
+| Limit                                                | Reason                                                                                                                                                              | What the app can do                                            |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| AIS cannot show that a boat is tribal                | AIS has no registration or membership field                                                                                                                         | Show the rule that gave each label                             |
+| The tribal vessel registry is not public             | WAC 308-93-770 limits access to law enforcement. Other people need a court order or written permission from the treaty fisher or tribe                              | Let an authorized user enter their own list                    |
+| A boat with no AIS, or with AIS off, does not appear | AIS is a broadcast. [Ecology reports](https://apps.ecology.wa.gov/publications/documents/2008019.pdf) that tribal fishing vessels under 65 ft often do not transmit | Say "no vessels heard"                                         |
+| AIS does not show a permit, catch, gear or intent    | AIS has no field for these                                                                                                                                          | Show the vessel's data without a verdict                       |
+| AIS identity is self-reported                        | An operator enters the name and other static data. A wrong or false value looks the same as a true one                                                              | Mark data as self-reported, and show `flags` on the live feed  |
+| Radar cannot identify a boat                         | Radar shows a contact. It has no MMSI, name or registration number                                                                                                  | Show the contact as unidentified                               |
+| NOAA data arrives months late                        | The newest NOAA day is Jun 30, 2026                                                                                                                                 | Use the live feed for recent data, and show each source's date |
+
+### Limits of the research so far
+
+- **No public list found.** We found no public source that links the `XWL` fleet to an MMSI or a call sign.
+- **Owner lookups not run.** [NAVCEN](https://navcen.uscg.gov/ais-vessel-information-verification-service) and the FCC's ship license search can reportedly search by owner, and a person can try these in a browser. Our scripts received HTTP 403 from uscg.mil and fcc.gov, and we did not try to get around that. We ran no "Lummi" search.
+- **No organization-owned boats named.** We found no public list of boats that the Nation owns. We did not search for boats that individual members own.
+- **No AIS count for tribal boats.** We found no published count of tribal vessels with AIS.
+- **A hull number can identify a boat with no AIS.** It is on both sides of the bow, so a person or camera may read it. We did not test this.
 
 ## Facts: measured in the sample
 
@@ -447,7 +553,7 @@ I read the NOAA record, the Ecology report and the streamer code directly. The l
 
 - Position and static data arrive as separate messages, so a vessel can have no name or type at first. The streamer README allows about 6 minutes for this after a restart.
 - The feed uses placeholder values such as heading 511 and speed 102.3. The streamer changes them to `null`.
-- The streamer keeps each vessel's latest position and the last 1,000 events in memory. It stores no history, so the vessel list starts empty after a restart and refills over a few minutes.
+- The streamer keeps each vessel's latest position and the last 1,000 events in memory, so the vessel list starts empty after a restart and refills over a few minutes. It can also record reports to a database.
 
 **Live feed test results, as reported by the streamer worker on Nov 7, 2026**
 
@@ -495,7 +601,7 @@ The data does not settle these questions. Each item states what we see, why it s
 8. **Is reception good for boats we never heard?** The reception test measures only vessels that a receiver heard. A small boat with a low antenna can stay unheard. A boat with a known AIS device can test this on a planned route near the polygon.
 9. **Can the live feed hear vessels inside the polygon?** This is the most important open question for the live tracker. The feed has heard none there yet, but the test is too short to show a blind spot. In the NOAA sample, 20% to 27% of the ferry's daily rows are inside the polygon. If each row is independent, two rows are both outside about 55% to 65% of the time. To test this, watch the live feed during the next ferry crossings, then compare the share of rows inside with the NOAA share.
 10. **Does the live feed cover the same area as NOAA?** The two sources can use different receivers, so NOAA's reception result may not apply. A side-by-side capture can test this, but NOAA's files arrive months later.
-11. **Why did the live test hear 631 vessels in 4 minutes?** In the NOAA sample, the busiest day in the streamer's default box has 261 vessels. The test may have used a larger box, or the feed may hear far more vessels than NOAA keeps. Confirm the box that the test used, then compare the counts.
+11. **Why did the live test hear 631 vessels in 4 minutes?** In the NOAA sample, the busiest day in the streamer's default box has 261 vessels. The test may have used a larger box, or the feed may hear far more vessels than NOAA keeps. Confirm the box that the test used, then compare the counts. Later data is mixed. One live snapshot had 116 vessels, close to the NOAA median of 105 on a map. The streamer database had 264 live vessels from about 10 minutes.
 12. **Will the streamer survive a real outage or a long run?** Nobody has tested a multi-hour run or a real provider outage. The certificate date of Nov 17 is the next known risk. Test this on the home lab, and check that the status changes to `stale` or `down`.
 13. **How complete is the Canadian side?** NOAA says it keeps U.S. EEZ broadcasts, but 2.8% of rows are north of 49 N. The rows are uneven along the border. We do not know the filter's exact effect. Use counts on the Canadian side with care.
 
@@ -510,9 +616,9 @@ The data does not settle these questions. Each item states what we see, why it s
 ### Trends
 
 19. **Is the summer rise real across years?** Each month has one day, except June 2026. We have no second year to compare. More boats may also carry AIS now. More data would help, at about 92 GB of transfer per year.
-20. **Does the sample include fishing openings?** We have no opening calendar. One day every 29 days can easily miss a short opening. The Nation or WDFW can supply the dates.
+20. **Does the sample include fishing openings?** We found the current Lummi hotline message but no past messages, so we cannot match openings to the sample days. One day every 29 days can easily miss a short opening. A saved copy of each new message can build this record from now on.
 21. **Is there a weekday pattern beyond the ferry?** The June week is one week, and each UTC day starts in the evening before, Pacific time. A Saturday file starts at 5 PM on Friday.
-22. **What happened after Jun 30, 2026?** NOAA's files are 130 days behind today. Only a stored live capture can fill that gap, and the streamer stores no history yet.
+22. **What happened after Jun 30, 2026?** NOAA's files are 130 days behind today. Only a stored live capture can fill that gap. The streamer's database started on Nov 7, 2026, so Jul 1 to Nov 6, 2026 stays empty until NOAA publishes those days.
 23. **Does more commercial traffic reach Lummi waters?** Statewide tank traffic rose in 2025. We have no earlier local data to compare, and no measure of harm.
 
 ### Interpretation
@@ -529,6 +635,7 @@ The data does not settle these questions. Each item states what we see, why it s
 - Treat a position as doubtful if the move needs an impossible speed.
 - Do not use 5-minute rows to count entries.
 - Write "no vessels heard". Do not write "no vessels present".
+- Show the rule behind each label, so a user can see and change it. An empty tribal group means that no vessel matched the settings.
 - Keep the replay as the main demo path. Show the live feed as an extra, with its status visible.
 - Do not publish private boat names, call signs or MMSIs from this sample. `data/AGENTS.md` has the rule.
 

@@ -57,6 +57,7 @@ Private boats (sailing, pleasure craft and fishing, AIS types 36, 37 and 30) are
 - `components/ConfigPanel.tsx`: client; `{ vessels, config, selected, onSelect, onChange }`; built from shadcn Card, Table, Input, Label, Button and Badge: the trusted patterns (text and label; add, delete), the approved vessel ids and the watch list (add the selected vessel or a typed id; delete). Everything the user can change lives here and is saved in the browser.
 - `components/AlertPanel.tsx`: client; `{ entries }`; the email box (validated, saved in the browser), "Send test alert", one email per entry keyed by vessel and time, a log of every attempt and its result.
 - `app/actions.ts`: `sendAlert(to, entry)` → `{ ok: true } | { ok: false, error }`; a server function; checks the address, sends through Resend with wording by status.
+- `lib/live.ts`, tested first: `parseRecord(unknown)` checks a streamer record at the network edge; `toVessel(record)` turns it into a `Vessel` with a one-point track; `merge(vessels, record)` appends newer fixes, capped at twelve hours. Live mode in `Replay` subscribes to the streamer's `/v1/stream` with `EventSource`, keeps the vessels in a Map, and runs the same rules on them with the wall clock as `t`.
 - `lib/data.ts`: the `data.json` types.
 - `lib/config.ts`, each function tested first: the user's configuration.
   - `Config = { patterns: { text: string; label: string }[]; priority: Set<string>; watch: Set<string> }`

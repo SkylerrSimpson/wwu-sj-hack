@@ -14,6 +14,8 @@ Node 24: https://nodejs.org. pnpm: `npm i -g pnpm` or https://pnpm.io/installati
 
 Email alerts need a free [Resend](https://resend.com) key in `apps/web/.env.local` as `RESEND_API_KEY=...`; the test sender only delivers to the Resend account owner's inbox.
 
+Live mode needs the streamer running: `cd apps/streamer && uv sync && AIS_API_KEY=... uv run python -m streamer` (see `apps/streamer/README.md`); the web app reads it at `http://127.0.0.1:8787`, or at `NEXT_PUBLIC_STREAMER_URL` if set.
+
 The data the app reads is committed at `apps/web/public/data.json`. Regenerating it needs [uv](https://docs.astral.sh/uv/), which fetches Python itself: `cd data && uv sync && uv run build.py`.
 
 `make setup`, `make dev`, `make data`, `make fmt` and `make check` wrap these; `docs/SETUP.md` has the from-scratch version.

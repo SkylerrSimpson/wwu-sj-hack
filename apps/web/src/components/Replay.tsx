@@ -27,6 +27,7 @@ import {
 import type { Data, Vessel } from "@/lib/data";
 import { corroboration, echoCounts, interpolateAt, matchAis, radarEntries } from "@/lib/fusion";
 import type { SensorData } from "@/lib/sensors";
+import { merge, parseRecord, toVessel } from "@/lib/live";
 import { STATUS_WORD, type ShipStatus } from "@/lib/status";
 import {
   inLummiWaters,
@@ -44,6 +45,10 @@ const SPEEDS = [60, 600, 3600];
 const SENSOR_LABEL = { radar: "Radar", lidar: "LIDAR" };
 const TICK_MS = 250;
 const STORAGE_KEY = "vesselConfig";
+const STREAMER = process.env.NEXT_PUBLIC_STREAMER_URL ?? "http://127.0.0.1:8787";
+
+type Mode = "replay" | "live";
+type Feed = { status: string; last_message_age_s: number | null };
 
 const clock = new Intl.DateTimeFormat("en-US", {
   timeZone: "America/Los_Angeles",
@@ -85,7 +90,12 @@ function ReplayView({ data }: { data: Data }) {
   const [selected, setSelected] = useState<string | null>(null);
   const [showPaths, setShowPaths] = useState(false);
   const [entries, setEntries] = useState<Entry[]>([]);
-  const prevT = useRef(start + 1800);
+  const [mode, setMode] = useState<Mode>("replay");
+  const [live, setLive] = useState<Map<string, Vessel>>(new Map());
+  const [feed, setFeed] = useState<Feed | null>(null);
+  const [now, setNow] = useState(() => Date.now() / 1000);
+  // Each mode keeps its own "last tick", so switching modes never opens a giant entry window.
+  const prev = useRef<Record<Mode, number>>({ replay: start + 1800, live: Date.now() / 1000 });
   const loaded = useRef(false);
 
   useEffect(() => {
@@ -106,7 +116,46 @@ function ReplayView({ data }: { data: Data }) {
     }
   }, [config]);
 
-  const lists = useMemo(() => listsFor(data.vessels, config), [data.vessels, config]);
+  useEffect(() => {
+    if (mode !== "live") return;
+    const es = new EventSource(`${STREAMER}/v1/stream`);
+    const parse = (e: MessageEvent): unknown => {
+      try {
+        return JSON.parse(String(e.data));
+      } catch {
+        return null;
+      }
+    };
+    es.addEventListener("snapshot", (e) => {
+      const p = parse(e) as { feed?: Feed; vessels?: unknown[] } | null;
+      const next = new Map<string, Vessel>();
+      for (const x of p?.vessels ?? []) {
+        const r = parseRecord(x);
+        if (r) next.set(r.id, toVessel(r));
+      }
+      setLive(next);
+      if (p?.feed) setFeed(p.feed);
+    });
+    es.addEventListener("vessel", (e) => {
+      const r = parseRecord(parse(e));
+      if (r) setLive((m) => merge(m, r));
+    });
+    es.addEventListener("status", (e) => {
+      const f = parse(e) as Feed | null;
+      if (f) setFeed(f);
+    });
+    es.onerror = () => setFeed({ status: "down", last_message_age_s: null });
+    const tick = setInterval(() => setNow(Date.now() / 1000), 2000);
+    return () => {
+      es.close();
+      clearInterval(tick);
+    };
+  }, [mode]);
+
+  const liveVessels = useMemo(() => [...live.values()], [live]);
+  const vessels = mode === "live" ? liveVessels : data.vessels;
+  const at = mode === "live" ? now : t;
+  const lists = useMemo(() => listsFor(vessels, config), [vessels, config]);
 
   // The synthetic radar and LIDAR load only when switched on, so the AIS replay never
   // depends on them.
@@ -153,12 +202,12 @@ function ReplayView({ data }: { data: Data }) {
 
   // Entries come only from time moving forward; scrubbing back resets the window without firing.
   useEffect(() => {
-    const from = prevT.current;
-    prevT.current = t;
-    if (t <= from) return;
+    const from = prev.current[mode];
+    prev.current[mode] = at;
+    if (at <= from) return;
     const found = [
-      ...newEntries(data.vessels, data.boundary.ring, from, t, lists),
-      ...radarEntries(unknown, data.boundary.ring, from, t),
+      ...newEntries(vessels, data.boundary.ring, from, at, lists),
+      ...(mode === "replay" ? radarEntries(unknown, data.boundary.ring, from, at) : []),
     ].sort((a, b) => a.t - b.t);
     if (!found.length) return;
     // Scrubbing back and playing again crosses the same fixes; the alert log must not repeat them.
@@ -166,7 +215,7 @@ function ReplayView({ data }: { data: Data }) {
       const seen = new Set(e.map((x) => `${x.vesselId}:${x.t}`));
       return [...e, ...found.filter((x) => !seen.has(`${x.vesselId}:${x.t}`))];
     });
-  }, [t, data, lists, unknown]);
+  }, [at, mode, vessels, data.boundary.ring, lists, unknown]);
 
   const suspicious = new Set(
     entries.filter((e) => e.status === "suspicious").map((e) => e.vesselId),
@@ -175,20 +224,20 @@ function ReplayView({ data }: { data: Data }) {
     const s = vesselStatus(v, lists);
     return s === "unlisted" && suspicious.has(v.id) ? "suspicious" : s;
   };
-  const rows = summary(inLummiWaters(data.vessels, data.boundary.ring, t, lists), (v) =>
+  const rows = summary(inLummiWaters(vessels, data.boundary.ring, at, lists), (v) =>
     labelOf(v, config),
   );
   const paths: Path[] = showPaths
-    ? data.vessels.map((v) => ({
+    ? vessels.map((v) => ({
         id: v.id,
         status: statusOf(v),
         latLngs: v.track.map(([, lon = 0, lat = 0]) => [lat, lon]),
       }))
     : [];
-  const picked = data.vessels.find((v) => v.id === selected);
-  const pickedPos = picked ? positionAt(picked.track, t) : null;
-  const ships: Ship[] = data.vessels.flatMap((v) => {
-    const p = positionAt(v.track, t);
+  const picked = vessels.find((v) => v.id === selected);
+  const pickedPos = picked ? positionAt(picked.track, at) : null;
+  const ships: Ship[] = vessels.flatMap((v) => {
+    const p = positionAt(v.track, at);
     return p
       ? [
           {
@@ -232,26 +281,44 @@ function ReplayView({ data }: { data: Data }) {
     <div className="grid gap-4 lg:grid-cols-3">
       <div className="lg:col-span-2">
         <div className="my-2 flex flex-wrap items-center gap-2 text-sm">
-          <Button size="sm" onClick={() => setPlaying((p) => !p)}>
-            {playing ? "Pause" : "Play"}
-          </Button>
-          <label htmlFor="speed">Speed</label>
-          <select
-            id="speed"
-            className="rounded border border-neutral-300 p-1"
-            value={speed}
-            onChange={(e) => setSpeed(Number(e.target.value))}
+          <Button
+            size="sm"
+            variant={mode === "replay" ? "default" : "outline"}
+            onClick={() => setMode("replay")}
           >
-            {SPEEDS.map((s) => (
-              <option key={s} value={s}>
-                {s}x
-              </option>
-            ))}
-          </select>
-          {demoStart !== undefined && (
-            <Button size="sm" variant="outline" onClick={() => setT(demoStart - 300)}>
-              Skip to the demo vessel
-            </Button>
+            Recorded days
+          </Button>
+          <Button
+            size="sm"
+            variant={mode === "live" ? "default" : "outline"}
+            onClick={() => setMode("live")}
+          >
+            Live
+          </Button>
+          {mode === "replay" && (
+            <>
+              <Button size="sm" onClick={() => setPlaying((p) => !p)}>
+                {playing ? "Pause" : "Play"}
+              </Button>
+              <label htmlFor="speed">Speed</label>
+              <select
+                id="speed"
+                className="rounded border border-neutral-300 p-1"
+                value={speed}
+                onChange={(e) => setSpeed(Number(e.target.value))}
+              >
+                {SPEEDS.map((sp) => (
+                  <option key={sp} value={sp}>
+                    {sp}x
+                  </option>
+                ))}
+              </select>
+              {demoStart !== undefined && (
+                <Button size="sm" variant="outline" onClick={() => setT(demoStart - 300)}>
+                  Skip to the demo vessel
+                </Button>
+              )}
+            </>
           )}
           <label className="flex items-center gap-1">
             <input
@@ -267,7 +334,7 @@ function ReplayView({ data }: { data: Data }) {
             </Button>
           )}
           <span className="font-mono" aria-live="polite">
-            {clock.format(t * 1000)}
+            {clock.format(at * 1000)}
           </span>
           <label className="ml-auto flex items-center gap-1">
             <input
@@ -278,19 +345,23 @@ function ReplayView({ data }: { data: Data }) {
             Show paths
           </label>
         </div>
-        <label htmlFor="time" className="sr-only">
-          Replay time
-        </label>
-        <input
-          id="time"
-          type="range"
-          className="mb-2 w-full"
-          min={start}
-          max={end}
-          step={300}
-          value={t}
-          onChange={(e) => setT(Number(e.target.value))}
-        />
+        {mode === "replay" && (
+          <>
+            <label htmlFor="time" className="sr-only">
+              Replay time
+            </label>
+            <input
+              id="time"
+              type="range"
+              className="mb-2 w-full"
+              min={start}
+              max={end}
+              step={300}
+              value={t}
+              onChange={(e) => setT(Number(e.target.value))}
+            />
+          </>
+        )}
         <ShipMap
           ring={data.boundary.ring}
           ships={[...ships, ...contacts]}
@@ -300,7 +371,13 @@ function ReplayView({ data }: { data: Data }) {
           onSelect={setSelected}
         />
         <p className="mt-1 text-xs text-neutral-600">
-          Recorded AIS, {data.window.start.slice(0, 10)} to {data.window.end.slice(0, 10)} (UTC);{" "}
+          {mode === "live"
+            ? `Live AIS through the streamer: feed ${feed?.status ?? "connecting"}${
+                feed?.last_message_age_s == null
+                  ? ""
+                  : `, last message ${Math.round(feed.last_message_age_s)} s ago`
+              }. Only vessels transmitting AIS and heard by this feed appear; no vessel heard does not mean no vessel present.`
+            : `Recorded AIS, ${data.window.start.slice(0, 10)} to ${data.window.end.slice(0, 10)} (UTC).`}{" "}
           {ships.length} vessels transmitting now. Green: {STATUS_WORD.priority}. Red:{" "}
           {STATUS_WORD.watch}. Orange: {STATUS_WORD.suspicious}. Grey: {STATUS_WORD.unlisted}. Hover
           a dot for its name and status.

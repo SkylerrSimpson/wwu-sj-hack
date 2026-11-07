@@ -30,7 +30,7 @@ const ShipMap = dynamic(() => import("./ShipMap"), { ssr: false });
 
 const SPEEDS = [60, 600, 3600];
 const TICK_MS = 250;
-const STORAGE_KEY = "officerLists";
+const STORAGE_KEY = "vesselLists";
 
 const clock = new Intl.DateTimeFormat("en-US", {
   timeZone: "America/Los_Angeles",
@@ -68,7 +68,7 @@ function saveLists(lists: Lists) {
   }
 }
 
-// Owns the clock, the officer's lists, the selection and the entries. Every tick asks lib/vessel
+// Owns the clock, the user's lists, the selection and the entries. Every tick asks lib/vessel
 // where each vessel is and which non-priority vessels crossed in since the last tick.
 export default function Replay({ data }: { data: Data }) {
   const start = Date.parse(data.window.start) / 1000;
@@ -118,7 +118,10 @@ export default function Replay({ data }: { data: Data }) {
     const s = vesselStatus(v, lists);
     return s === "unlisted" && suspicious.has(v.id) ? "suspicious" : s;
   };
-  const rows = summary(inLummiWaters(data.vessels, data.boundary.ring, t, lists), (v) => v.type);
+  const rows = summary(
+    inLummiWaters(data.vessels, data.boundary.ring, t, lists),
+    (v) => v.fleet ?? v.type,
+  );
   const ships: Ship[] = data.vessels.flatMap((v) => {
     const p = positionAt(v.track, t);
     return p

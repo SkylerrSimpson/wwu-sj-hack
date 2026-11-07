@@ -31,7 +31,7 @@ export async function sendAlert(
       from: "Lummi Vessel Tracker <onboarding@resend.dev>",
       to: address,
       subject: watch ? "Lummi waters: watch-list vessel entered" : "Lummi waters: vessel entered",
-      text: `A vessel ${watch ? "on your watch list" : "not on the priority list"} entered Lummi waters: ${entry.name}, ${pacific.format(entry.t * 1000)}, ${where}. Self-reported AIS: corroborate before acting.`,
+      text: `A vessel ${watch ? "on your watch list" : "not on the approved list"} entered Lummi waters: ${entry.name}, ${pacific.format(entry.t * 1000)}, ${where}. Self-reported AIS: corroborate before acting.`,
     });
     return error ? { ok: false, error: error.message } : { ok: true };
   } catch (e) {

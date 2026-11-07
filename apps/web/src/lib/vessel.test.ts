@@ -78,6 +78,8 @@ const vessel = (id: string, track: number[][], priority = false): Vessel => ({
   name: `Boat ${id}`,
   type: "Tug",
   length_m: null,
+  callsign: "",
+  fleet: null,
   priority,
   track,
 });

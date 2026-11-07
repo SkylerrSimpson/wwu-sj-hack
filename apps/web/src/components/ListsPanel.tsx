@@ -53,7 +53,7 @@ export default function ListsPanel({
   return (
     <section aria-labelledby="lists-heading" className="rounded border border-neutral-300 p-3">
       <h2 id="lists-heading" className="font-semibold">
-        The officer&apos;s lists
+        Vessel lists
       </h2>
       <label htmlFor="vessel-select" className="mt-2 block text-sm">
         Vessel (or click a dot on the map)
@@ -77,7 +77,7 @@ export default function ListsPanel({
           disabled={!selected}
           onClick={() => selected && add("priority", selected)}
         >
-          Add to priority
+          Approve
         </Button>
         <Button
           size="sm"
@@ -88,7 +88,7 @@ export default function ListsPanel({
           Add to watch list
         </Button>
       </div>
-      {list("Priority, added by the officer", "priority")}
+      {list("Approved vessels", "priority")}
       {list("Watch list", "watch")}
     </section>
   );

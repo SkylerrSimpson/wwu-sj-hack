@@ -44,7 +44,7 @@ test("a good address gets one email naming the vessel, the time in Pacific, and 
     from: "Lummi Vessel Tracker <onboarding@resend.dev>",
     to: "officer@example.org",
     subject: "Lummi waters: vessel entered",
-    text: "A vessel not on the priority list entered Lummi waters: Demo vessel (synthetic), Thu, Dec 5, 2024, 5:30 AM PST, 48.77 N 122.70 W. Self-reported AIS: corroborate before acting.",
+    text: "A vessel not on the approved list entered Lummi waters: Demo vessel (synthetic), Thu, Dec 5, 2024, 5:30 AM PST, 48.77 N 122.70 W. Self-reported AIS: corroborate before acting.",
   });
 });
 

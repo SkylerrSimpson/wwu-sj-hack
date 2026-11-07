@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Lummi Vessel Tracker",
   description:
-    "Vessels in Lummi waters from recorded AIS, with an alert when one not on the priority list enters.",
+    "Vessels in Lummi waters from recorded AIS, with an alert when one not on the approved list enters.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -23,7 +23,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col">
         <p role="status" className="bg-amber-100 px-4 py-2 text-sm text-amber-900">
-          Priority list invented for this demo; no vessel shown is suspected of anything.
+          Approved list invented for this demo; no vessel shown is suspected of anything.
         </p>
         {children}
         <p className="mx-auto w-full max-w-5xl px-4 pb-4 text-sm text-neutral-600">

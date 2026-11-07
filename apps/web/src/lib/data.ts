@@ -7,6 +7,9 @@ export type Vessel = {
   name: string;
   type: string;
   length_m: number | null;
+  callsign: string;
+  // "Whatcom County ferry" or "Law enforcement, listed" for the explicit list; else null
+  fleet: string | null;
   priority: boolean;
   // [unix seconds, lon, lat], one per 5 minutes, in time order
   track: number[][];

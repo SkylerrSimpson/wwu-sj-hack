@@ -26,7 +26,7 @@ Ninety seconds, pre-recorded.
 
 - A live AIS feed: it needs a long-running server; the replay runs the same rules on recorded data.
 - Editing the priority list in the app: it needs a database; it's a file the Nation would edit.
-- Accounts, a database, text messages: the email address stays in the browser.
+- Accounts and a database: sign-in is a demo gate with one shared password; the Nation's own sign-on comes later. Text messages: email only.
 - Google Maps: it needs a billing account and a key; Leaflet with OpenStreetMap gives the same top-down view.
 - A watch zone outside the boundary (the tugs anchoring at the north-west edge): a slide, not a feature.
 - Satellite radar for boats with AIS off: the "next" slide.
@@ -51,30 +51,24 @@ Private boats (sailing, pleasure craft and fishing, AIS types 36, 37 and 30) are
 
 ## Shape
 
-- `/` (`app/page.tsx`): the map, the controls, the table, the lists panel and the alerts panel, with the banner, caveats and sources in `app/layout.tsx`.
-- `components/Replay.tsx`: client; `<Replay data={data} />`. Owns the clock (`t`, `playing`, `speed`), the user's configuration (local storage), the selected vessel and the entries. It turns the configuration into `Lists` with `lib/config` before asking `lib/vessel` anything. Every 250 ms while playing it advances `t` by `speed / 4`, asks `lib/vessel` for positions, the in-water summary and new entries over `(prevT, t]` (prevT held in a ref, so re-renders and scrubbing never re-fire), and hands entries to the alerts panel.
-- `components/ShipMap.tsx`: client; `{ ring, ships, onSelect }`; Leaflet on a canvas renderer, one marker per vessel moved in place each tick, coloured by status with the status in the tooltip; clicking a dot selects it.
-- `components/ConfigPanel.tsx`: client; `{ vessels, config, selected, onSelect, onChange }`; built from shadcn Card, Table, Input, Label, Button and Badge: the trusted patterns (text and label; add, delete), the approved vessel ids and the watch list (add the selected vessel or a typed id; delete). Everything the user can change lives here and is saved in the browser.
-- `components/AlertPanel.tsx`: client; `{ entries }`; the email box (validated, saved in the browser), "Send test alert", one email per entry keyed by vessel and time, a log of every attempt and its result.
-- `app/actions.ts`: `sendAlert(to, entry)` → `{ ok: true } | { ok: false, error }`; a server function; checks the address, sends through Resend with wording by status.
-- `lib/live.ts`, tested first: `parseRecord(unknown)` checks a streamer record at the network edge; `toVessel(record)` turns it into a `Vessel` with a one-point track; `merge(vessels, record)` appends newer fixes, capped at twelve hours. Live mode in `Replay` subscribes to the streamer's `/v1/stream` with `EventSource`, keeps the vessels in a Map, and runs the same rules on them with the wall clock as `t`.
-- `lib/data.ts`: the `data.json` types.
-- `lib/config.ts`, each function tested first: the user's configuration.
-  - `Config = { patterns: { text: string; label: string }[]; priority: Set<string>; watch: Set<string> }`
-  - `DEFAULT_CONFIG`: patterns XWL "Lummi Nation", WSF "Washington State Ferries", SWN "Swinomish", NKK "Nooksack"; empty lists
-  - `matchedPattern(v, patterns)` → the first pattern whose text appears in the vessel's name or call sign, case-insensitive, or null
-  - `listsFor(vessels, config)` → `Lists` for `lib/vessel`: the user's priority ids plus every vessel a pattern matches, and the watch ids
-  - `labelOf(v, config)` → the data's `fleet`, else the matched pattern's label, else "Priority, approved by the user" when on the priority list, else the vessel type
-  - `parseConfig(text)` → `Config` or null, and `serializeConfig(config)` → text, for local storage
-- `lib/vessel.ts`, each function tested first:
-  - `Lists = { priority: Set<string>; watch: Set<string> }`: the user's additions by vessel id
-  - `vesselStatus(v, lists)` → `"priority" | "watch" | "unlisted"`: watch if on the watch list; else priority if `v.priority` (the data's explicit list) or on the priority list (which `lib/config` has already filled from the patterns); else unlisted
-  - `isInside(lon, lat, ring)` → `boolean`
-  - `positionAt(track, t)` → `[lon, lat]` or `null`: the last fix at or before `t`, or `null` when that fix is more than 30 minutes old or `t` is before the first
-  - `newEntries(vessels, ring, from, to, lists)` → `Entry[]`: each position with time in `(from, to]` that is inside while the previous was outside, for vessels whose status is not priority; `Entry` is `{ vesselId, name, t, lon, lat, status }` with status `"suspicious"` (unlisted) or `"watch"`
-  - `inLummiWaters(vessels, ring, t, lists)` → `{ vessel, status, lon, lat }[]`: every vessel with a position inside at `t`
-  - `summary(inWater)` → `{ label, count, names }[]`: grouped by `fleet` when set, else by `type`, with watch and suspicious rows first
-- The browser remembers: the alert email and the user's configuration (local storage), the replay time (in memory).
+Routes:
+
+- `/` (`app/page.tsx` + `components/SignIn.tsx`): the LVT sign-in. Username, password, Sign in; "Sign up" says accounts are issued by the Nation. `app/auth.ts` is a server function: `signIn(formData)` checks the password against `LVT_DEMO_PASSWORD`, sets an httpOnly cookie and redirects to `/map`; `signOut()` clears it. `src/proxy.ts` (Next 16's middleware) sends requests to `/map` and `/settings` without the cookie back to `/`. A demo gate, not accounts.
+- `/map` (`app/map/page.tsx` → `components/Replay.tsx`): the tracker. The map fills the viewport. A thin top bar (`components/TopBar.tsx`): the LVT mark at left, linking to `/settings`; Recorded days and Live; play, speed, the slider, skip; the clock; the paths switch; an eye button at far right that hides the bar and the column, leaving the map and a small "Show controls" button. A thin left column (`components/SidePanel.tsx`), 320 px, with tabs: In the water, Lists (counts plus Approve and Watch for the selected vessel), Alerts, Vessel. The ethics banner is one thin amber line under the bar.
+- `/settings` (`app/settings/page.tsx` → `components/SettingsView.tsx`): everything configurable in full: approved name patterns, approved vessel ids, the watch list, the alert email, with a link back to the map and a sign-out button.
+
+Shared state: the configuration and the alert email live in local storage; `components/useConfig.ts` and `components/useAlertEmail.ts` are the two hooks that wrap the tested `parseConfig` and `serializeConfig`, so `lib/` stays pure and both pages see the same values.
+
+Modules (unchanged from the MVP):
+
+- `components/Replay.tsx`: client; owns the clock, the mode, the configuration, the selection, the entries and the overlay visibility; composes `TopBar`, `ShipMap`, `SidePanel`, `ConfigPanel` (quick actions) and `AlertPanel`.
+- `components/ShipMap.tsx`: client; `{ ring, ships, paths, selectedId, onSelect, className }`; Leaflet on a canvas renderer; dots moved in place; a popup on click.
+- `components/TopBar.tsx` and `components/SidePanel.tsx`: props in, markup out, no state of their own except which tab is open.
+- `lib/vessel.ts`, `lib/config.ts`, `lib/live.ts`, `lib/data.ts`, `app/actions.ts`: as before.
+
+## Look
+
+A modern web application a government office could run, built from shadcn (`base-nova`, neutral) and nothing hand-rolled: Card, Tabs, Table, Input, Label, Button, Badge, Tooltip, Separator, Switch. One typeface (Geist). The 4 px spacing scale, `size="sm"` controls in the chrome, 16 px lucide icons with a visible label or a tooltip. Muted text for secondary lines, a real empty state for every list, plain US English with no em dashes. No gradients, no glass, no emoji, no radii beyond the library's, no colour as the only signal. The map is the hero; the chrome stays thin and the column collapses.
 
 ## Risks and safeguards
 

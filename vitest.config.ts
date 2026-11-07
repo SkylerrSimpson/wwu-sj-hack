@@ -7,6 +7,9 @@ export default defineConfig({
   },
   resolve: {
     // Next resolves `@/` from apps/web/tsconfig.json; Vitest has to be told.
-    alias: { "@/": fileURLToPath(new URL("./apps/web/src/", import.meta.url)) },
+    // Backslashes in a Windows path stop the alias from resolving.
+    alias: {
+      "@/": fileURLToPath(new URL("./apps/web/src/", import.meta.url)).replaceAll("\\", "/"),
+    },
   },
 });

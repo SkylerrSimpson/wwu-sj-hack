@@ -45,28 +45,35 @@ The contract is `data/schema.json`. `data.json` holds:
 - `sources`: each with `id`, `name`, `url`, `retrieved`
 - `window`: `start` and `end`, ISO UTC
 - `boundary`: `source` and `ring`, a list of `[lon, lat]`
-- `vessels`: each with `id`, `source`, `name`, `type` (in words), `length_m` (number or null), `fleet` (a string such as "Lummi Nation", "Washington State Ferries", "Swinomish", "Nooksack", "Whatcom County ferry", or null), `priority` (true exactly when `fleet` is set), and `track`, a list of `[time, lon, lat]` with time in Unix seconds, one position per 5 minutes, duplicates removed
+- `vessels`: each with `id`, `source`, `name`, `type` (in words), `length_m` (number or null), `callsign` ("" when unknown or private), `fleet` ("Whatcom County ferry" or "Law enforcement, listed" for the two vessels on the explicit list, else null), `priority` (true exactly when `fleet` is set), and `track`, a list of `[time, lon, lat]` with time in Unix seconds, one position per 5 minutes, duplicates removed
 
 Private boats (sailing, pleasure craft and fishing, AIS types 36, 37 and 30) are anonymised: named by type and length, such as "Fishing, 24 m", with ids `private-1`, `private-2`, and so on; the committed raw file has their names, IMO and call signs blanked. Tugs, ferries, cargo ships and tankers keep their AIS names. `data/AGENTS.md` keeps personal data out of the public files.
 
 ## Shape
 
 - `/` (`app/page.tsx`): the map, the controls, the table, the lists panel and the alerts panel, with the banner, caveats and sources in `app/layout.tsx`.
-- `components/Replay.tsx`: client; `<Replay data={data} />`. Owns the clock (`t`, `playing`, `speed`), the officer's lists (local storage), the selected vessel and the entries. Every 250 ms while playing it advances `t` by `speed / 4`, asks `lib/vessel` for positions, the in-water summary and new entries over `(prevT, t]` (prevT held in a ref, so re-renders and scrubbing never re-fire), and hands entries to the alerts panel.
+- `components/Replay.tsx`: client; `<Replay data={data} />`. Owns the clock (`t`, `playing`, `speed`), the officer's configuration (local storage), the selected vessel and the entries. It turns the configuration into `Lists` with `lib/config` before asking `lib/vessel` anything. Every 250 ms while playing it advances `t` by `speed / 4`, asks `lib/vessel` for positions, the in-water summary and new entries over `(prevT, t]` (prevT held in a ref, so re-renders and scrubbing never re-fire), and hands entries to the alerts panel.
 - `components/ShipMap.tsx`: client; `{ ring, ships, onSelect }`; Leaflet on a canvas renderer, one marker per vessel moved in place each tick, coloured by status with the status in the tooltip; clicking a dot selects it.
-- `components/ListsPanel.tsx`: client; `{ vessels, lists, selected, onChange }`; a dropdown of vessels, "Add to priority" and "Add to watch list", and both lists with a remove button each.
+- `components/ConfigPanel.tsx`: client; `{ vessels, config, selected, onSelect, onChange }`; built from shadcn Card, Table, Input, Label, Button and Badge: the trusted patterns (text and label; add, delete), the approved vessel ids and the watch list (add the selected vessel or a typed id; delete). Everything the officer can change lives here and is saved in the browser.
 - `components/AlertPanel.tsx`: client; `{ entries }`; the email box (validated, saved in the browser), "Send test alert", one email per entry keyed by vessel and time, a log of every attempt and its result.
 - `app/actions.ts`: `sendAlert(to, entry)` → `{ ok: true } | { ok: false, error }`; a server function; checks the address, sends through Resend with wording by status.
 - `lib/data.ts`: the `data.json` types.
+- `lib/config.ts`, each function tested first: the officer's configuration.
+  - `Config = { patterns: { text: string; label: string }[]; priority: Set<string>; watch: Set<string> }`
+  - `DEFAULT_CONFIG`: patterns XWL "Lummi Nation", WSF "Washington State Ferries", SWN "Swinomish", NKK "Nooksack"; empty lists
+  - `matchedPattern(v, patterns)` → the first pattern whose text appears in the vessel's name or call sign, case-insensitive, or null
+  - `listsFor(vessels, config)` → `Lists` for `lib/vessel`: the officer's priority ids plus every vessel a pattern matches, and the watch ids
+  - `labelOf(v, config)` → the data's `fleet`, else the matched pattern's label, else "Priority, approved by the officer" when on the priority list, else the vessel type
+  - `parseConfig(text)` → `Config` or null, and `serializeConfig(config)` → text, for local storage
 - `lib/vessel.ts`, each function tested first:
   - `Lists = { priority: Set<string>; watch: Set<string> }`: the officer's additions by vessel id
-  - `vesselStatus(v, lists)` → `"priority" | "watch" | "unlisted"`: watch if on the watch list; else priority if `v.priority` or on the priority list; else unlisted
+  - `vesselStatus(v, lists)` → `"priority" | "watch" | "unlisted"`: watch if on the watch list; else priority if `v.priority` (the data's explicit list) or on the priority list (which `lib/config` has already filled from the patterns); else unlisted
   - `isInside(lon, lat, ring)` → `boolean`
   - `positionAt(track, t)` → `[lon, lat]` or `null`: the last fix at or before `t`, or `null` when that fix is more than 30 minutes old or `t` is before the first
   - `newEntries(vessels, ring, from, to, lists)` → `Entry[]`: each position with time in `(from, to]` that is inside while the previous was outside, for vessels whose status is not priority; `Entry` is `{ vesselId, name, t, lon, lat, status }` with status `"suspicious"` (unlisted) or `"watch"`
   - `inLummiWaters(vessels, ring, t, lists)` → `{ vessel, status, lon, lat }[]`: every vessel with a position inside at `t`
   - `summary(inWater)` → `{ label, count, names }[]`: grouped by `fleet` when set, else by `type`, with watch and suspicious rows first
-- The browser remembers: the alert email and the officer's lists (local storage), the replay time (in memory).
+- The browser remembers: the alert email and the officer's configuration (local storage), the replay time (in memory).
 
 ## Risks and safeguards
 
@@ -84,7 +91,7 @@ Private boats (sailing, pleasure craft and fishing, AIS types 36, 37 and 30) are
 ## Glossary
 
 - **Lummi waters**: the boundary polygon.
-- **Priority vessel**: a vessel allowed in Lummi waters, which never alerts: its AIS name or call sign contains `XWL`, `WSF`, `SWN` or `NKK`, or it is on the explicit list, or the officer added it. A vessel on neither list is unlisted.
+- **Priority vessel**: a vessel allowed in Lummi waters, which never alerts: its AIS name or call sign matches a pattern the officer configures (`XWL`, `WSF`, `SWN` and `NKK` to start), or it is on the explicit list in the data, or the officer approved its id. A vessel on neither list is unlisted.
 - **Watch list**: vessels the officer has asked to be alerted about. The tool never calls a vessel an offender; that is the officer's call.
 - **Suspicious**: an unlisted vessel that has entered Lummi waters.
 - **Entry**: a non-priority vessel's first position inside Lummi waters after one outside; each entry produces one alert.

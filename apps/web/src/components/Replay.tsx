@@ -438,7 +438,7 @@ function ReplayView({ data }: { data: Data }) {
             : `Recorded AIS, ${dayPacific.format(start * 1000)} to ${dayPacific.format(end * 1000)}, ${yearPacific.format(end * 1000)} (Pacific).`}{" "}
         {ships.length} vessels on the map, {inWater} in Lummi waters.
       </p>
-      <Table>
+      <Table className="max-md:[&_td]:px-1 max-md:[&_th]:px-1">
         <TableHeader>
           <TableRow>
             <TableHead>Status</TableHead>
@@ -449,7 +449,7 @@ function ReplayView({ data }: { data: Data }) {
         <TableBody>
           {rows.length === 0 && (
             <TableRow>
-              <TableCell colSpan={3} className="text-muted-foreground">
+              <TableCell colSpan={3} className="whitespace-normal text-muted-foreground">
                 No vessel is transmitting from inside Lummi waters right now.
               </TableCell>
             </TableRow>
@@ -461,6 +461,7 @@ function ReplayView({ data }: { data: Data }) {
             >
               <TableCell>
                 <Badge
+                  className="max-w-full whitespace-normal [overflow-wrap:anywhere] max-md:px-1.5"
                   variant={
                     r.status === "watch"
                       ? "destructive"
@@ -472,7 +473,7 @@ function ReplayView({ data }: { data: Data }) {
                   {STATUS_WORD[r.status]}
                 </Badge>
               </TableCell>
-              <TableCell className="whitespace-normal break-words">
+              <TableCell className="whitespace-normal [overflow-wrap:anywhere]">
                 {r.label}
                 <span className="block text-xs text-muted-foreground">{r.names.join(", ")}</span>
               </TableCell>

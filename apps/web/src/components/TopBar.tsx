@@ -89,21 +89,19 @@ export default function TopBar(p: TopBarProps) {
   }, [p.overlayShown]);
   if (!p.overlayShown)
     return (
-      <>
-        <p
-          className={`fixed inset-x-0 top-0 ${Z} bg-amber-100 px-3 py-1 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-100`}
-        >
+      <header ref={header} className={`fixed inset-x-0 top-0 ${Z}`}>
+        <p className="bg-amber-100 px-3 py-1 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-100">
           {p.banner}
         </p>
         <Button
           size="sm"
           variant="outline"
-          className={`fixed top-8 right-3 ${Z}`}
+          className="absolute top-full right-3 mt-2"
           onClick={p.onToggleOverlay}
         >
           <Eye /> Show controls
         </Button>
-      </>
+      </header>
     );
   const live = p.mode === "live";
   return (
@@ -135,7 +133,7 @@ export default function TopBar(p: TopBarProps) {
 
         {/* Below xl, the playback controls drop to their own row under the logo and switches. */}
         <div className="order-last flex min-w-0 flex-1 basis-full flex-wrap items-center gap-2 xl:order-none xl:basis-0">
-          <div role="group" aria-label="Mode" className="flex gap-1">
+          <div role="group" aria-label="Mode" className="flex flex-wrap gap-1">
             {MODES.map((m) => (
               <Button
                 key={m}
@@ -149,12 +147,12 @@ export default function TopBar(p: TopBarProps) {
             ))}
           </div>
           {live ? (
-            <span className="flex flex-1 items-center gap-2 truncate text-sm text-muted-foreground">
+            <span className="order-last flex w-full min-w-0 items-start gap-2 text-sm text-muted-foreground sm:order-none sm:w-auto sm:min-w-48 sm:flex-1">
               <span
                 aria-hidden
-                className={`size-2 shrink-0 rounded-full ${p.feedLive ? `bg-green-600 animate-pulse motion-reduce:animate-none` : "bg-muted-foreground"}`}
+                className={`mt-1.5 size-2 shrink-0 rounded-full ${p.feedLive ? `bg-green-600 animate-pulse motion-reduce:animate-none` : "bg-muted-foreground"}`}
               />
-              {p.feedText}
+              <span className="min-w-0 [overflow-wrap:anywhere]">{p.feedText}</span>
             </span>
           ) : (
             <>
@@ -256,7 +254,7 @@ export default function TopBar(p: TopBarProps) {
           </Tooltip>
         </div>
       </div>
-      <p className="flex h-7 items-center bg-amber-100 px-3 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-100">
+      <p className="bg-amber-100 px-3 py-1 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-100">
         {p.banner}
       </p>
     </header>

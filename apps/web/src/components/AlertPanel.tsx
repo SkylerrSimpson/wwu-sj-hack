@@ -47,7 +47,7 @@ export default function AlertPanel({ entries }: { entries: Entry[] }) {
   }, [entries, email]);
 
   return (
-    <div className="space-y-3 text-sm">
+    <div className="space-y-3 text-sm [overflow-wrap:anywhere]">
       <p className="text-muted-foreground">
         {email ? `Alerts go to ${email}.` : "No alert email set."}{" "}
         <Link href="/settings" className="underline">

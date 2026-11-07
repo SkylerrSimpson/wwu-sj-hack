@@ -76,17 +76,17 @@ export default function ConfigPanel({
     config[from].size === 0 ? (
       <p className="text-sm text-muted-foreground">{empty}</p>
     ) : (
-      <Table>
+      <Table className="table-fixed">
         <TableHeader>
           <TableRow>
             <TableHead>Vessel</TableHead>
-            <TableHead className="w-0" />
+            <TableHead className="w-24" />
           </TableRow>
         </TableHeader>
         <TableBody>
           {[...config[from]].map((id) => (
             <TableRow key={id}>
-              <TableCell>
+              <TableCell className="whitespace-normal [overflow-wrap:anywhere]">
                 {nameOf(id) ?? id}
                 <span className="block text-xs text-muted-foreground">
                   {nameOf(id) ? `AIS id ${id}` : "Not in this recording"}
@@ -117,27 +117,29 @@ export default function ConfigPanel({
             A vessel whose call sign or name has one of these as a whole word is approved and never
             alerts.
           </p>
-          <Table>
+          <Table className="table-fixed">
             <TableHeader>
               <TableRow>
-                <TableHead>Text</TableHead>
+                <TableHead className="w-1/4">Text</TableHead>
                 <TableHead>Label</TableHead>
                 <TableHead className="max-sm:hidden">Matches</TableHead>
-                <TableHead className="w-0" />
+                <TableHead className="w-24" />
               </TableRow>
             </TableHeader>
             <TableBody>
               {config.patterns.map((p) => (
                 <TableRow key={p.text}>
-                  <TableCell className="font-mono">{p.text}</TableCell>
+                  <TableCell className="font-mono whitespace-normal [overflow-wrap:anywhere]">
+                    {p.text}
+                  </TableCell>
                   {/* On a phone the Matches column folds under the label, so Remove stays in view. */}
-                  <TableCell className="whitespace-normal">
+                  <TableCell className="whitespace-normal [overflow-wrap:anywhere]">
                     {p.label}
                     <span className="block text-xs text-muted-foreground sm:hidden">
                       Matches {p.field === "callsign" ? "call sign" : "name"}
                     </span>
                   </TableCell>
-                  <TableCell className="max-sm:hidden">
+                  <TableCell className="whitespace-normal max-sm:hidden">
                     {p.field === "callsign" ? "Call sign" : "Name"}
                   </TableCell>
                   <TableCell className="text-right">

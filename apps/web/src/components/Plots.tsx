@@ -71,7 +71,7 @@ export default function Plots(p: PlotsProps) {
 
 function LineChart({ series, from, to, cut, step }: PlotsProps) {
   const H = 120;
-  const [L, B, T] = [24, 16, 6];
+  const [L, B, T] = [0, 2, 2];
   const shown = series.filter((s) => s.t < cut);
   const max = Math.max(1, ...shown.map((s) => s.count));
   const x = (t: number) => L + ((t - from) / (to - from || 1)) * (W - L - 2);
@@ -79,49 +79,52 @@ function LineChart({ series, from, to, cut, step }: PlotsProps) {
   if (!shown.length)
     return <p className="text-xs text-muted-foreground">No vessel in this window yet.</p>;
   return (
-    <svg
-      viewBox={`0 0 ${W} ${H}`}
-      className="w-full text-foreground"
-      role="img"
-      aria-label={`Vessels per interval, from 0 to a peak of ${max}`}
-    >
-      <line x1={L} y1={H - B} x2={W} y2={H - B} className="stroke-border" />
-      <text x={L - 4} y={T + 4} textAnchor="end" className="fill-muted-foreground text-[9px]">
-        {max}
-      </text>
-      <text x={L - 4} y={H - B} textAnchor="end" className="fill-muted-foreground text-[9px]">
-        0
-      </text>
-      <text x={L} y={H - 3} className="fill-muted-foreground text-[9px]">
-        {short.format(from * 1000)}
-      </text>
-      <text x={W} y={H - 3} textAnchor="end" className="fill-muted-foreground text-[9px]">
-        {short.format(to * 1000)}
-      </text>
-      <polyline
-        fill="none"
-        className="stroke-primary"
-        strokeWidth={1.5}
-        strokeLinejoin="round"
-        points={shown.map((s) => `${x(s.t + step / 2)},${y(s.count)}`).join(" ")}
-      />
-      {/* Dots too: the first interval of a replay is a single point, which a line cannot draw. */}
-      {shown.map((s) => (
-        <circle key={s.t} cx={x(s.t + step / 2)} cy={y(s.count)} r={2} className="fill-primary">
-          <title>{`${short.format(s.t * 1000)}: ${s.count} vessels`}</title>
-        </circle>
-      ))}
-      {cut < to && (
-        <line
-          x1={x(cut)}
-          y1={T}
-          x2={x(cut)}
-          y2={H - B}
-          className="stroke-muted-foreground"
-          strokeDasharray="2 2"
-        />
-      )}
-    </svg>
+    <div className="space-y-1">
+      <div className="flex gap-2">
+        <div
+          aria-hidden
+          className="flex shrink-0 flex-col justify-between text-xs text-muted-foreground"
+        >
+          <span>{max}</span>
+          <span>0</span>
+        </div>
+        <svg
+          viewBox={`0 0 ${W} ${H}`}
+          className="min-w-0 flex-1 self-start text-foreground"
+          role="img"
+          aria-label={`Vessels per interval, from 0 to a peak of ${max}`}
+        >
+          <line x1={L} y1={H - B} x2={W} y2={H - B} className="stroke-border" />
+          <polyline
+            fill="none"
+            className="stroke-primary"
+            strokeWidth={1.5}
+            strokeLinejoin="round"
+            points={shown.map((s) => `${x(s.t + step / 2)},${y(s.count)}`).join(" ")}
+          />
+          {/* Dots too: the first interval of a replay is a single point, which a line cannot draw. */}
+          {shown.map((s) => (
+            <circle key={s.t} cx={x(s.t + step / 2)} cy={y(s.count)} r={2} className="fill-primary">
+              <title>{`${short.format(s.t * 1000)}: ${s.count} vessels`}</title>
+            </circle>
+          ))}
+          {cut < to && (
+            <line
+              x1={x(cut)}
+              y1={T}
+              x2={x(cut)}
+              y2={H - B}
+              className="stroke-muted-foreground"
+              strokeDasharray="2 2"
+            />
+          )}
+        </svg>
+      </div>
+      <div className="flex flex-wrap justify-between gap-x-4 gap-y-1 text-xs text-muted-foreground">
+        <span>{short.format(from * 1000)}</span>
+        <span>{short.format(to * 1000)}</span>
+      </div>
+    </div>
   );
 }
 
@@ -138,7 +141,7 @@ function PieChart({ pie }: { pie: Record<Category, number> }) {
   });
   const at = (a: number) => `${R + R * Math.cos(a)},${R + R * Math.sin(a)}`;
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex flex-wrap items-center gap-3">
       <svg viewBox={`0 0 ${2 * R} ${2 * R}`} className="size-26 shrink-0" aria-hidden>
         {slices.map((s) =>
           s.share === 1 ? (
@@ -153,12 +156,12 @@ function PieChart({ pie }: { pie: Record<Category, number> }) {
           ) : null,
         )}
       </svg>
-      <ul className="space-y-0.5 text-xs">
+      <ul className="min-w-0 flex-1 basis-56 space-y-1 text-xs">
         {slices.map((s) => (
-          <li key={s.c} className="flex items-center gap-1.5">
-            <span className="size-2.5 shrink-0 rounded-sm border" style={{ background: s.fill }} />
-            {s.label}
-            <span className="text-muted-foreground">
+          <li key={s.c} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-1.5">
+            <span className="mt-0.5 size-2.5 rounded-sm border" style={{ background: s.fill }} />
+            <span>{s.label}</span>
+            <span className="whitespace-nowrap text-muted-foreground">
               {pie[s.c]} ({Math.round(s.share * 100)}%)
             </span>
           </li>
@@ -178,48 +181,53 @@ function Heatmap({ heat, box, ring }: { heat: Heat; box: Box; ring: number[][] }
   // Parked boats pile thousands of positions into a few cells; a log scale keeps the rest visible.
   const shade = (n: number) => Math.log1p(n) / Math.log1p(heat.max);
   return (
-    <svg
-      viewBox={`0 0 ${W} ${H}`}
-      className="w-full overflow-hidden rounded-sm border text-foreground"
-      role="img"
-      aria-label={`Grid of where the vessels were, busiest cell ${heat.max} positions`}
-    >
-      {/* shortcut: Mercator tiles stretched linearly, fine at this zoom; reproject if the box grows past a few degrees. */}
-      <g className="opacity-40 grayscale dark:opacity-60 dark:invert">
-        {tilesFor(box, 11).map((tile) => (
-          <image
-            key={`${tile.x}/${tile.y}`}
-            href={`https://tile.openstreetmap.org/${tile.z}/${tile.x}/${tile.y}.png`}
-            x={x(tile.west)}
-            y={y(tile.north)}
-            width={x(tile.east) - x(tile.west)}
-            height={y(tile.south) - y(tile.north)}
-            preserveAspectRatio="none"
-          />
-        ))}
-      </g>
-      {heat.counts.map((n, i) =>
-        n ? (
-          <rect
-            key={i}
-            x={(i % heat.cols) * cw}
-            y={Math.floor(i / heat.cols) * ch}
-            width={cw}
-            height={ch}
-            className="fill-blue-600 dark:fill-sky-300"
-            opacity={0.25 + 0.75 * shade(n)}
-          />
-        ) : null,
-      )}
-      <polyline
-        fill="none"
-        className="stroke-destructive"
-        strokeWidth={1.5}
-        points={ring.map(([lon = 0, lat = 0]) => `${x(lon)},${y(lat)}`).join(" ")}
-      />
-      <text x={W - 2} y={H - 2} textAnchor="end" className="fill-muted-foreground text-[7px]">
-        &copy; OpenStreetMap
-      </text>
-    </svg>
+    <figure className="space-y-1">
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        className="w-full overflow-hidden rounded-sm border text-foreground"
+        role="img"
+        aria-label={`Grid of where the vessels were, busiest cell ${heat.max} positions`}
+      >
+        {/* shortcut: Mercator tiles stretched linearly, fine at this zoom; reproject if the box grows past a few degrees. */}
+        <g className="opacity-40 grayscale dark:opacity-60 dark:invert">
+          {tilesFor(box, 11).map((tile) => (
+            <image
+              key={`${tile.x}/${tile.y}`}
+              href={`https://tile.openstreetmap.org/${tile.z}/${tile.x}/${tile.y}.png`}
+              x={x(tile.west)}
+              y={y(tile.north)}
+              width={x(tile.east) - x(tile.west)}
+              height={y(tile.south) - y(tile.north)}
+              preserveAspectRatio="none"
+            />
+          ))}
+        </g>
+        {heat.counts.map((n, i) =>
+          n ? (
+            <rect
+              key={i}
+              x={(i % heat.cols) * cw}
+              y={Math.floor(i / heat.cols) * ch}
+              width={cw}
+              height={ch}
+              className="fill-blue-600 dark:fill-sky-300"
+              opacity={0.25 + 0.75 * shade(n)}
+            />
+          ) : null,
+        )}
+        <polyline
+          fill="none"
+          className="stroke-destructive"
+          strokeWidth={1.5}
+          points={ring.map(([lon = 0, lat = 0]) => `${x(lon)},${y(lat)}`).join(" ")}
+        />
+      </svg>
+      <figcaption className="text-right text-xs text-muted-foreground">
+        &copy;{" "}
+        <a className="underline" href="https://www.openstreetmap.org/copyright">
+          OpenStreetMap contributors
+        </a>
+      </figcaption>
+    </figure>
   );
 }

@@ -172,13 +172,13 @@ export default function SidePanel({
         >
           <div className="mx-auto h-full w-0.5 group-hover/handle:bg-ring group-focus-visible/handle:bg-ring" />
         </div>
-        <div className="flex items-center gap-1 border-b p-2">
-          <TabsList className="min-w-0 flex-1">
+        <div className="flex shrink-0 items-start gap-1 border-b p-2">
+          <TabsList className="grid min-w-0 flex-1 grid-cols-2 gap-1 group-data-horizontal/tabs:h-auto md:flex md:flex-wrap">
             {TABS.map(([key, label]) => (
               <TabsTrigger
                 key={key}
                 value={key}
-                className="min-w-0 px-1 text-xs whitespace-normal leading-tight"
+                className="h-auto min-w-0 flex-wrap px-1 text-xs leading-tight whitespace-normal md:min-w-fit"
               >
                 {label}
                 {counts?.[key] !== undefined && (
@@ -206,17 +206,20 @@ export default function SidePanel({
             <TooltipContent side="bottom">Hide panel</TooltipContent>
           </Tooltip>
         </div>
-        {TABS.map(([key]) => (
-          <TabsContent
-            key={key}
-            value={key}
-            keepMounted
-            className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 animate-in fade-in duration-200 motion-reduce:animate-none"
-          >
-            {panes[key]}
-          </TabsContent>
-        ))}
-        {footer && <div className="border-t p-3">{footer}</div>}
+        {/* On phones, the sources scroll with the pane instead of squeezing its content out. */}
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain [overflow-wrap:anywhere] md:overflow-hidden">
+          {TABS.map(([key]) => (
+            <TabsContent
+              key={key}
+              value={key}
+              keepMounted
+              className="flex-none p-3 animate-in fade-in duration-200 motion-reduce:animate-none md:min-h-0 md:flex-1 md:overflow-y-auto md:overscroll-contain"
+            >
+              {panes[key]}
+            </TabsContent>
+          ))}
+          {footer && <div className="mt-auto shrink-0 border-t p-3">{footer}</div>}
+        </div>
       </Tabs>
     </>
   );

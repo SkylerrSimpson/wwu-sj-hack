@@ -1,6 +1,6 @@
 # AIS data analysis
 
-This document records what we learned from the bulk AIS sample. It separates facts from open questions. Read it before you use the sample or draw a conclusion from it.
+This document records what we learned from the bulk AIS sample. To choose front-end features, start with "What this data is", which describes each field, its common values and what it can support. The later sections list detailed facts, data problems and open questions.
 
 Written Nov 7, 2026. The app does not use this sample. The demo still uses the five December days in `data/raw/ais-2024-12-05-to-09.zip`.
 
@@ -15,6 +15,9 @@ Written Nov 7, 2026. The app does not use this sample. The demo still uses the f
 - **Unlisted vessel:** any vessel except the Lummi Island ferry and the listed patrol boat.
 - **Moving:** speed of 2 knots or more. **Stopped:** speed below 0.5 knots.
 - **Class A and Class B:** the two main types of AIS device. In this sample, commercial vessels mostly use Class A and small boats mostly use Class B.
+- **Private vessel:** a fishing, sailing or pleasure vessel. The app shows only its type and length. The sample has 2,946 private vessels (78%).
+- **Public vessel:** any other vessel. The app shows its name. The sample has 833 public vessels, including 57 of unknown type that the live feed hides until a type arrives.
+- **Streamer box:** the area that `apps/streamer` watches by default: 48.60 to 48.90 N, 122.90 to 122.40 W.
 
 ## The data we hold
 
@@ -31,6 +34,237 @@ Written Nov 7, 2026. The app does not use this sample. The demo still uses the f
 | Newest day online | Jun 30, 2026, when we checked on Nov 7, 2026                                          |
 
 The script kept each row as NOAA published it and cut only by location. Each file URL has this form: `https://noaaocm.blob.core.windows.net/ais/csv2/csv<year>/ais-<yyyy-mm-dd>.csv.zst`.
+
+## What this data is
+
+AIS is a ship radio system. Each AIS device regularly broadcasts a vessel ID, a position and motion data. It also broadcasts identity data, such as a name and a call sign. Receivers on shore record these messages. A vessel with no device, or with the device off, does not appear.
+
+NOAA joins these messages into one table. Each row has one vessel ID, one time, a position, motion data and identity data.
+
+### Every field
+
+"Filled" shows the percent of vessels with a value for identity fields, and the percent of rows with a value for motion fields.
+
+| Field            | What it is                            | Format or common values                    | Filled              |
+| ---------------- | ------------------------------------- | ------------------------------------------ | ------------------- |
+| `mmsi`           | Vessel ID                             | 9 digits. The first 3 show the flag        | 100%                |
+| `base_date_time` | Time of the row, in UTC               | `2026-06-30 00:00:02`                      | 100%                |
+| `longitude`      | Position                              | Decimal degrees                            | 100%                |
+| `latitude`       | Position                              | Decimal degrees                            | 100%                |
+| `sog`            | Speed over ground, in knots           | Median 0, and 90% of rows are 6.3 or below | 99.8% of rows       |
+| `cog`            | Direction of travel, in degrees       | 0 to 359.9                                 | 70.5% of rows       |
+| `heading`        | Direction of the bow, in degrees      | 0 to 359                                   | 29.6% of rows       |
+| `status`         | Navigation status code                | Class A only. See "Status codes"           | 22.4% of rows       |
+| `vessel_name`    | Vessel name                           | `WHATCOM CHIEF`                            | 99% of vessels      |
+| `call_sign`      | Radio call sign                       | `WDJ7956`                                  | 76% (89% of public) |
+| `imo`            | Permanent ship number                 | `IMO` and 7 digits. Mostly large ships     | 19% (69% of public) |
+| `vessel_type`    | Vessel type code                      | 37 is pleasure craft. See "Vessel types"   | 99% (93% of public) |
+| `length`         | Length, in meters                     | Median 14                                  | 93% of vessels      |
+| `width`          | Width, in meters                      | Median 5                                   | 90% of vessels      |
+| `draft`          | Depth of the hull in water, in meters | Median 7.6. Mostly large ships             | 18% (71% of public) |
+| `cargo`          | Code that usually repeats the type    | Same as `vessel_type` for 92% of vessels   | 21% (79% of public) |
+| `transceiver`    | AIS device class                      | `A` or `B`                                 | 100%                |
+
+NOAA does not publish destination or arrival time.
+
+### Call signs
+
+- **Most vessels have one.** 2,853 of 3,779 vessels have a call sign. The figure is 100% for cargo ships and tankers, 92% for fishing vessels, 87% for tugs, 85% for passenger vessels, 74% for sailing vessels and 70% for pleasure craft.
+- **A call sign identifies one vessel.** The 2,853 vessels have 2,850 different call signs. 19 vessels use more than one call sign during the sample.
+- **The common format is 7 characters.** 2,338 vessels (82%) have this format, such as `WDJ7956`. Others are shorter, such as `WXAE`.
+- **Some values are not real call signs.** 7 vessels have a placeholder value, 11 have 3 characters or fewer, and 10 have characters other than letters and digits.
+- **A prefix shows a country, not a fleet.** 71% of all call signs start with `WD`, so that prefix does not separate vessels in a useful way.
+
+| Prefix           | Vessels | Flag from the MMSI        |
+| ---------------- | ------- | ------------------------- |
+| `WD`             | 2,038   | United States             |
+| `WC`             | 59      | United States             |
+| `CF`             | 82      | Canada (all 82)           |
+| `V7`             | 68      | Marshall Islands (all 68) |
+| `D5`, `5L`, `A8` | 87      | Liberia (all 87)          |
+| `3E`             | 41      | Mostly Panama             |
+| `9V`             | 40      | Mostly Singapore          |
+| `C6`             | 24      | Mostly Bahamas            |
+| `VR`             | 14      | Hong Kong (all 14)        |
+
+The app shows a call sign only for public vessels. 741 of the 833 public vessels have one. In the replay data, 70 of 225 vessels have a call sign.
+
+### Names
+
+- **Almost every vessel has a name.** 99% of vessels have a name, and the median name has 9 characters.
+- **A name does not always identify one vessel.** 262 names are used by more than one vessel, for a total of 679 vessels. Among public vessels, only 7 names repeat, for a total of 16 vessels. Use the ID to follow a vessel.
+- **Names can show an operator.** Our count below uses public vessels only. We did not verify who owns these vessels.
+
+| Text in name         | Vessels | Types                            |
+| -------------------- | ------- | -------------------------------- |
+| `OCEAN` (first word) | 20      | 15 tugs, 3 cargo ships, 1 other  |
+| `SEASPAN`            | 16      | 12 tugs, 3 tankers, 1 cargo ship |
+| `MSC` (first word)   | 11      | Cargo ships                      |
+| `WSF`                | 9       | Passenger vessels                |
+| `WDFW`               | 6       | Law enforcement and other        |
+| `BLACKFISH`          | 5       | Passenger vessels                |
+| `FOSS`               | 4       | Tugs                             |
+
+The app's approved name patterns use text matching, so they can already use these words. Short text can match the wrong vessel. For example, `CG` also matches the name `CMA CGM`.
+
+### Flags
+
+The first 3 digits of the MMSI show the flag. This flag shows where a vessel is registered. It does not show who owns or operates the vessel.
+
+| Flag          | Vessels |
+| ------------- | ------- |
+| United States | 2,966   |
+| Canada        | 364     |
+| Other         | 449     |
+
+96% of cargo ships and 79% of tankers have a foreign flag. 96% of fishing vessels have a U.S. flag.
+
+### Vessel types
+
+| Codes      | Meaning           | Vessels | Word in the app |
+| ---------- | ----------------- | ------- | --------------- |
+| 37         | Pleasure craft    | 2,201   | Pleasure craft  |
+| 36         | Sailing           | 565     | Sailing         |
+| 70 to 79   | Cargo             | 300     | Cargo           |
+| 30         | Fishing           | 181     | Fishing         |
+| 31, 32, 52 | Towing and tug    | 129     | Tug             |
+| 80 to 89   | Tanker            | 127     | Tanker          |
+| 60 to 69   | Passenger         | 117     | Passenger       |
+| 55         | Law enforcement   | 11      | Law enforcement |
+| 54         | Anti-pollution    | 10      | Anti-pollution  |
+| 51         | Search and rescue | 29      | Other           |
+| 90 to 99   | Other             | 32      | Other           |
+| 35         | Military          | 7       | Other           |
+| No type    | Not known         | 56      | Other           |
+
+Each vessel appears here under its most common type. The app's "Other" group holds 138 vessels, including all search and rescue vessels.
+
+"Passenger" is a wide group: 32 of these vessels are 12 m or shorter, and 23 are over 100 m.
+
+### Vessel size
+
+Length separates small boats from large ships clearly. Few vessels fall between 50 m and 100 m.
+
+| Length       | Vessels |
+| ------------ | ------- |
+| Up to 8 m    | 185     |
+| 8 to 12 m    | 1,086   |
+| 12 to 20 m   | 1,406   |
+| 20 to 30 m   | 247     |
+| 30 to 50 m   | 107     |
+| 50 to 100 m  | 36      |
+| 100 to 200 m | 217     |
+| 200 to 400 m | 238     |
+
+The app shows length for private and public vessels.
+
+### Speed
+
+Median speed while moving:
+
+| Type      | Knots | Type     | Knots |
+| --------- | ----- | -------- | ----- |
+| Passenger | 13.9  | Tug      | 7.9   |
+| Cargo     | 11.8  | Fishing  | 7.7   |
+| Tanker    | 11.2  | Pleasure | 7.4   |
+|           |       | Sailing  | 5.6   |
+
+### Status codes
+
+Only Class A devices send status, and the values are often wrong. See "Status is not reliable".
+
+| Code | Meaning                 | Rows    |
+| ---- | ----------------------- | ------- |
+| 0    | Under way, using engine | 593,462 |
+| 5    | Moored                  | 204,569 |
+| 1    | At anchor               | 62,403  |
+| 12   | Reserved or towing code | 20,066  |
+| 11   | Reserved or towing code | 17,349  |
+| 8    | Under way, sailing      | 8,563   |
+| 3    | Restricted movement     | 7,762   |
+| 7    | Fishing                 | 2,305   |
+
+### What a map shows at one time
+
+We counted vessels with a row in the last 10 minutes, in the streamer box, at one time in each hour of all 19 days:
+
+| Vessels on the map | Median | 90th percentile | Highest |
+| ------------------ | ------ | --------------- | ------- |
+| All                | 105    | 121             | 146     |
+| Private            | 87     | 101             | 129     |
+| Moving             | 4      | 18              | 42      |
+
+Most dots on a map are therefore parked private boats. On half of the vessel-days, a vessel stays in the streamer box for 23 hours or more. On a quarter of them, it stays for about 2 hours or less.
+
+These counts use the NOAA sample. The live feed can show different numbers.
+
+### Regular vessels and visitors
+
+The streamer box has about 240 public vessels. 24 of them appear on 10 or more of the 19 days, and 121 appear on only one day. Of 567 pleasure craft, 43 appear on 10 or more days, and 315 appear on only one day.
+
+Public vessels of 20 m or more that appear on 10 or more days:
+
+| Name           | Call sign | Type           | Length | Days |
+| -------------- | --------- | -------------- | ------ | ---- |
+| WHATCOM CHIEF  | WDJ7956   | Passenger      | 32 m   | 19   |
+| NRC COLUMBIA   | WDA8288   | Anti-pollution | 36 m   | 19   |
+| PROTECTOR      | WCY2824   | Tug            | 41 m   | 16   |
+| WESTRAC II     | WCU4545   | Tug            | 24 m   | 15   |
+| VICTORIA STAR2 | WCW4552   | Passenger      | 29 m   | 14   |
+| TUG RESPONSE   | WDQ4966   | Tug            | 40 m   | 12   |
+| SOUND RELIANCE | WXAE      | Tanker         | 183 m  | 12   |
+| SALISH EXPRESS | WDJ9193   | Passenger      | 28 m   | 12   |
+| VALOR          | WDD8691   | Tug            | 30 m   | 12   |
+| OSPREY         | WDM6586   | Tug            | 40 m   | 10   |
+
+### Which fields reach the front end
+
+| Data                      | NOAA sample | Replay (`data.json`)    | Live feed (`apps/streamer`) |
+| ------------------------- | ----------- | ----------------------- | --------------------------- |
+| Position and time         | Yes         | Yes, in `track`         | Yes                         |
+| Name                      | Yes         | Public vessels only     | Public vessels only         |
+| Call sign                 | Yes         | Public vessels only     | Public vessels only         |
+| MMSI                      | Yes         | Public vessels, as `id` | Public vessels only         |
+| Type                      | Code        | Word                    | Word                        |
+| Length                    | Yes         | Yes                     | Yes                         |
+| Speed, course, heading    | Yes         | No                      | Yes                         |
+| Status                    | Yes         | No                      | Yes, in `nav_status`        |
+| Device class              | Yes         | No                      | Yes, in `vessel_class`      |
+| Position age              | No          | From `track` time       | Yes, in `heard_at`          |
+| Warning flags             | No          | No                      | Yes, in `flags`             |
+| Width, draft, IMO, cargo  | Yes         | No                      | No                          |
+| Destination, arrival time | No          | No                      | No                          |
+
+The replay can calculate speed from two positions in `track`. A new `data.json` field needs a schema issue, as `data/AGENTS.md` states. The AIS standard includes destination and arrival time in its static message. We did not check whether this feed delivers them.
+
+### What the data can support
+
+These are options, not decisions. Each one links a user need to a fact in this document.
+
+| User need                          | Field               | Why the data supports it                                  | Limit                                                               |
+| ---------------------------------- | ------------------- | --------------------------------------------------------- | ------------------------------------------------------------------- |
+| Find one known vessel              | Call sign, name, ID | Call signs are almost unique, and few public names repeat | Public vessels only                                                 |
+| See only certain kinds of boat     | Type                | 99% of vessels have a type                                | The "Other" group holds 138 vessels, and types can be wrong         |
+| Remove parked boats from view      | Speed               | About 4 of 105 vessels on the map are moving              | The replay must calculate speed                                     |
+| Filter by size                     | Length              | 93% have a length, and private vessels can use it too     | 7% have no length                                                   |
+| Group vessels by operator          | Name text           | Names such as `WSF` and `SEASPAN` repeat                  | We did not verify owners, and short text can match the wrong vessel |
+| Separate foreign ships             | Flag from MMSI      | Most cargo ships and tankers have a foreign flag          | Needs a new field for private vessels, and shows registration only  |
+| Tell regular vessels from visitors | ID over time        | 121 of about 240 public vessels appear on only one day    | Needs stored history, and the streamer has none                     |
+| Judge how current a dot is         | `heard_at`          | Rows arrive about 1 to 3 minutes apart                    | Live feed only                                                      |
+| See warnings about bad data        | `flags`             | Impossible moves and unusual IDs exist in the data        | Live feed only, and a warning is not proof                          |
+
+The data does not support these features today:
+
+| Feature                                    | Reason                                                                                                            |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| Filter by call sign prefix to find a fleet | A prefix shows a country. 71% of call signs start with `WD`.                                                      |
+| Search private boats by name or call sign  | The privacy rule hides these fields.                                                                              |
+| Filter by "anchored" or "fishing" status   | Class B has no status, and Class A status is often wrong. Use speed and time in place to detect a stopped vessel. |
+| Show "vessels fishing now"                 | AIS does not record this. Only 3 of 186 fishing vessels ever report status "fishing".                             |
+| Filter by destination                      | NOAA does not publish it, and the streamer does not read it.                                                      |
+| Filter by width, draft or IMO              | Neither the replay nor the live feed has these fields.                                                            |
+
+The map popup says "Call sign: not broadcast" for every vessel with an empty call sign. For private vessels, this text is not accurate: most of them broadcast a call sign, and the app hides it.
 
 ## Facts: measured in the sample
 

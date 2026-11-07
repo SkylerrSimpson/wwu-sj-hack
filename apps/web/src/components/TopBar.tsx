@@ -210,8 +210,7 @@ export default function TopBar(p: TopBarProps) {
                     render={
                       <Button
                         size="sm"
-                        variant="ghost"
-                        className="bg-orange-500 text-white hover:bg-orange-600 hover:text-white"
+                        variant="default"
                         aria-label="Skip to the demo vessel"
                         onClick={p.onSkip}
                       />

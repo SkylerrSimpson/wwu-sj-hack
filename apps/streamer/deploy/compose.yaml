@@ -59,7 +59,12 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${LUMMI_HOME}:${LUMMI_HOME}
-    command: ["sh", "-c", "while :; do sh \"$$LUMMI_HOME/repo/apps/streamer/deploy/update.sh\"; sleep 60; done"]
+    command:
+      [
+        "sh",
+        "-c",
+        'while :; do sh "$$LUMMI_HOME/repo/apps/streamer/deploy/update.sh"; sleep 60; done',
+      ]
     logging: *logging
 
 volumes:

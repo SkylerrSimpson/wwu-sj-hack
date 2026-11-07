@@ -1,19 +1,25 @@
-"""Synthetic radar, thermal camera and LIDAR data for Lummi waters. Nothing here is real.
+"""Synthetic radar, thermal camera and LIDAR data for Lummi waters. The sensors are not real.
 
 Usage: python generate.py <repo data.json> <out dir>
 
+The sensors see two kinds of boat: the real AIS vessels in data.json (positions from their
+recorded tracks), and invented boats with no AIS. A radar track that matches no AIS vessel is
+the unidentified boat the proof of concept is about.
+
 Writes two files to <out dir>:
 - `detections.csv`: one row per sensor hit, flat for plotting. Each row has the sensor's
-  estimate (position, size, speed, boat or not, confidence) and the ground truth behind it.
+  estimate (position, size, speed, boat or not, confidence) and the ground truth behind it;
+  `truth_ais_id` is the data.json vessel id when the object broadcasts AIS, else empty.
 - `sensors.json`: `sources`, `sensors` (where each sits and what it covers), `vessels` (radar
-  tracks of the boats, same fields as data.json vessels, so ShipMap and newEntries take them
-  unchanged) and `detections` (the CSV rows again).
+  tracks of the boats, ids `radar-n`, same fields as data.json vessels), `truth` (each radar
+  track's object and AIS vessel id, for scoring a match only) and `detections` (the CSV rows).
 """
 
 import csv
 import json
 import math
 import random
+import statistics
 import sys
 from datetime import UTC, datetime
 from itertools import pairwise
@@ -23,6 +29,8 @@ from typing import Any
 M_PER_DEG_LAT = 111_320
 SWEEP = 60  # seconds between radar sweeps
 TRACK_STEP = 300  # data.json's tracks are one position per 5 minutes
+MAX_GAP = 1800  # an AIS gap longer than this leaves the boat's position unknown, as positionAt does
+DEFAULT_SIZE_M = 10  # for AIS vessels with no length
 T0 = int(datetime(2024, 12, 6, 5, 0, tzinfo=UTC).timestamp())  # 9 PM Pacific, Dec 5
 T_END = T0 + 6 * 3600
 
@@ -77,12 +85,12 @@ SENSORS: list[dict[str, Any]] = [
     },
 ]
 
-# Ground truth. Legs are (lon, lat, minutes to reach it, minutes to stay there).
+# Invented ground truth: boats without AIS and things that aren't boats.
+# Legs are (lon, lat, minutes to reach it, minutes to stay there).
 OBJECTS: list[dict[str, Any]] = [
     {
-        "id": "radar-1",
+        "id": "noais-1",
         "kind": "boat",
-        "name": "Radar contact 1 (synthetic)",
         "size_m": 12,
         "start": T0,
         "legs": [
@@ -93,17 +101,8 @@ OBJECTS: list[dict[str, Any]] = [
         ],
     },
     {
-        "id": "radar-2",
+        "id": "noais-2",
         "kind": "boat",
-        "name": "Radar contact 2 (synthetic)",
-        "size_m": 40,
-        "start": T0 + 3600,
-        "legs": [(-122.790, 48.700, 0, 0), (-122.790, 48.860, 90, 0)],  # passes outside
-    },
-    {
-        "id": "radar-3",
-        "kind": "boat",
-        "name": "Radar contact 3 (synthetic)",
         "size_m": 8,
         "start": T0 + 7200,
         "legs": [
@@ -183,6 +182,31 @@ def true_path(start: int, legs: list[tuple]) -> dict[int, tuple[float, float]]:
     return path
 
 
+def ais_path(track: list[list[float]]) -> dict[int, tuple[float, float]]:
+    """Position every SWEEP seconds in the window, between AIS fixes at most MAX_GAP apart."""
+    path = {}
+    for (ta, lona, lata), (tb, lonb, latb) in pairwise(track):
+        if tb - ta > MAX_GAP or tb < T0 or ta > T_END:
+            continue
+        for t in range(math.ceil(ta / SWEEP) * SWEEP, int(tb) + 1, SWEEP):
+            f = (t - ta) / (tb - ta) if tb > ta else 0
+            path[t] = (lona + (lonb - lona) * f, lata + (latb - lata) * f)
+    return {t: p for t, p in path.items() if T0 <= t <= T_END}
+
+
+def ais_objects(vessels: list[dict]) -> list[dict[str, Any]]:
+    """The real AIS vessels as ground truth, with their recorded tracks as the true path."""
+    objects = []
+    for v in vessels:
+        if v["source"] != "ais":  # the demo vessel is synthetic AIS; only real tracks here
+            continue
+        path = ais_path(v["track"])
+        if path:
+            size = v["length_m"] or DEFAULT_SIZE_M
+            objects.append({"id": v["id"], "kind": "boat", "size_m": size, "path": path})
+    return objects
+
+
 def speed_course(a: tuple[float, float], b: tuple[float, float], dt: int) -> tuple[float, float]:
     east, north = offset_m(b[0], b[1], a[0], a[1])
     return math.hypot(east, north) / dt * 1.944, math.degrees(math.atan2(east, north)) % 360
@@ -230,15 +254,16 @@ def row(
         "confidence": conf,
         "truth_id": truth["id"],
         "truth_kind": truth["kind"],
+        "truth_ais_id": truth["id"] if "path" in truth else "",
     }
 
 
-def generate(rng: random.Random) -> list[dict]:
+def generate(objects: list[dict], rng: random.Random) -> list[dict]:
     rows = []
-    paths = {o["id"]: true_path(o["start"], o["legs"]) for o in OBJECTS}
+    paths = {o["id"]: o.get("path") or true_path(o["start"], o["legs"]) for o in objects}
     for sensor in SENSORS:
         for t in range(T0, T_END + 1, sensor["every_s"]):
-            for o in OBJECTS:
+            for o in objects:
                 pos = paths[o["id"]].get(t)
                 if pos is None or not sees(sensor, *pos):
                     continue
@@ -263,63 +288,84 @@ def generate(rng: random.Random) -> list[dict]:
     return sorted(rows, key=lambda r: (r["t"], r["sensor"]))
 
 
-def tracks(rows: list[dict]) -> list[dict]:
-    """The boats' radar fixes, thinned to data.json's 5-minute track shape."""
-    vessels = []
-    for o in OBJECTS:
-        if o["kind"] != "boat":
-            continue
-        track = [
-            [r["t"], r["lon"], r["lat"]]
-            for r in rows
-            if r["truth_id"] == o["id"] and r["kind"] == "radar" and r["t"] % TRACK_STEP == 0
-        ]
+def tracks(rows: list[dict], objects: list[dict]) -> tuple[list[dict], dict[str, dict]]:
+    """The boats' radar fixes, thinned to data.json's 5-minute track shape.
+
+    Radar can't identify a boat, so each track is `radar-n`, numbered by first sighting, and
+    the object behind it goes in a separate truth map.
+    """
+    # shortcut: fixes are grouped by the true object; a real system needs a tracker here.
+    fixes: dict[str, list[list[float]]] = {}
+    sizes: dict[str, list[float]] = {}
+    for r in rows:
+        if r["truth_kind"] == "boat" and r["kind"] == "radar" and r["t"] % TRACK_STEP == 0:
+            fixes.setdefault(r["truth_id"], []).append([r["t"], r["lon"], r["lat"]])
+            sizes.setdefault(r["truth_id"], []).append(r["size_m"])
+    ais = {o["id"] for o in objects if "path" in o}
+    vessels, truth = [], {}
+    for n, (oid, track) in enumerate(sorted(fixes.items(), key=lambda kv: (kv[1][0][0], kv[0])), 1):
+        vid = f"radar-{n}"
         vessels.append(
             {
-                "id": o["id"],
+                "id": vid,
                 "source": SOURCE["id"],
-                "name": o["name"],
-                "type": "Unknown (no AIS)",
-                "length_m": o["size_m"],
+                "name": f"Radar contact {n} (synthetic)",
+                "type": "Unknown, radar only",
+                "length_m": round(statistics.median(sizes[oid])),  # radar's estimate
+                "callsign": "",
+                "fleet": None,
                 "priority": False,
                 "track": track,
             }
         )
-    return vessels
+        truth[vid] = {"truth_id": oid, "ais_id": oid if oid in ais else None}
+    return vessels, truth
 
 
 def main(data_path: str, out_dir: str) -> None:
-    ring = json.loads(Path(data_path).read_text(encoding="utf-8"))["boundary"]["ring"]
-    rows = generate(random.Random(7))  # fixed seed: the same files every run
-    vessels = tracks(rows)
+    data = json.loads(Path(data_path).read_text(encoding="utf-8"))
+    ring = data["boundary"]["ring"]
+    objects = ais_objects(data["vessels"]) + OBJECTS
+    rows = generate(objects, random.Random(7))  # fixed seed: the same files every run
+    vessels, truth = tracks(rows, objects)
 
     # Self-checks: the scenario does what the demo needs.
     def entries(v: dict) -> int:
         flags = [is_inside(lon, lat, ring) for _, lon, lat in v["track"]]
         return sum(b and not a for a, b in pairwise(flags))
 
-    by_id = {v["id"]: v for v in vessels}
-    assert entries(by_id["radar-1"]) == 1, "radar-1 should enter Lummi waters exactly once"
-    assert not any(
-        is_inside(lon, lat, ring)
-        for vid in ("radar-2", "radar-3")
-        for _, lon, lat in by_id[vid]["track"]
-    )
+    by_truth = {truth[v["id"]]["truth_id"]: v for v in vessels}
+    assert entries(by_truth["noais-1"]) == 1, "noais-1 should enter Lummi waters exactly once"
+    assert not any(is_inside(lon, lat, ring) for _, lon, lat in by_truth["noais-2"]["track"])
+    assert [v["id"] for v in vessels if entries(v) and not truth[v["id"]]["ais_id"]] == [
+        by_truth["noais-1"]["id"]
+    ], "the only boat without AIS that enters should be noais-1"
+    assert sum(t["ais_id"] is not None for t in truth.values()) >= 3, "radar should see AIS boats"
     assert all(v["track"] for v in vessels), "every boat should be in radar range"
     for s in SENSORS:
         mine = [r for r in rows if r["sensor"] == s["id"]]
         right = sum(r["boat"] == (r["truth_kind"] == "boat") for r in mine)
         assert mine and 0.7 < right / len(mine) < 1, f"{s['id']}: expected mostly right, some wrong"
-    assert {r["truth_id"] for r in rows if r["kind"] == "lidar"} >= {"radar-1"}
+    assert {r["truth_id"] for r in rows if r["kind"] == "lidar"} >= {"noais-1"}
 
     out = Path(out_dir)
     with open(out / "detections.csv", "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=list(rows[0]))
         writer.writeheader()
         writer.writerows(rows)
-    data = {"sources": [SOURCE], "sensors": SENSORS, "vessels": vessels, "detections": rows}
-    (out / "sensors.json").write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
-    print(f"wrote {len(rows)} detections and {len(vessels)} radar tracks to {out}")
+    out_data = {
+        "sources": [SOURCE],
+        "sensors": SENSORS,
+        "vessels": vessels,
+        "truth": truth,
+        "detections": rows,
+    }
+    (out / "sensors.json").write_text(json.dumps(out_data, indent=2) + "\n", encoding="utf-8")
+    n_ais = sum(t["ais_id"] is not None for t in truth.values())
+    print(
+        f"wrote {len(rows)} detections and {len(vessels)} radar tracks "
+        f"({n_ais} with AIS, {len(vessels) - n_ais} without) to {out}"
+    )
 
 
 if __name__ == "__main__":

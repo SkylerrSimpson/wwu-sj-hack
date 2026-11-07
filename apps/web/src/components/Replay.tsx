@@ -14,6 +14,7 @@ import { useFilter } from "@/components/useFilter";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -38,6 +39,7 @@ import {
   heatmap,
   stepFor,
 } from "@/lib/stats";
+import { PANEL_DEFAULT } from "@/lib/panel";
 import { STATUS_WORD, type ShipStatus } from "@/lib/status";
 import {
   inLummiWaters,
@@ -83,6 +85,37 @@ const dayUtc = new Intl.DateTimeFormat("en-US", {
 // "2026-11-07" to "Nov 7, 2026"
 const dayLong = (iso: string) => dayUtc.format(Date.parse(`${iso}T00:00:00Z`));
 
+// The shape of the screen, pulsing, while the 4 MB of tracks download.
+function LoadingScreen() {
+  return (
+    <div className="relative h-dvh w-full overflow-hidden" aria-busy="true">
+      <span className="sr-only" aria-live="polite">
+        Loading vessel positions
+      </span>
+      <div className="fixed inset-x-0 top-0 z-10 flex h-12 items-center gap-3 border-b bg-background px-3">
+        <Skeleton className="h-6 w-12" />
+        <Skeleton className="h-7 w-28" />
+        <Skeleton className="h-7 w-16" />
+        <Skeleton className="h-7 max-w-md flex-1" />
+        <Skeleton className="ml-auto size-7 rounded-full" />
+        <Skeleton className="size-7 rounded-full" />
+      </div>
+      <Skeleton className="fixed inset-x-0 top-12 h-7 rounded-none" />
+      <Skeleton className="absolute inset-0 top-[76px] rounded-none" />
+      <div className="absolute top-[76px] bottom-0 left-0 w-80 space-y-3 border-r bg-background p-3">
+        <div className="flex gap-2">
+          {[0, 1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-8 flex-1" />
+          ))}
+        </div>
+        {["w-full", "w-5/6", "w-full", "w-2/3", "w-3/4", "w-1/2"].map((w, i) => (
+          <Skeleton key={i} className={`h-4 ${w}`} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // The tracks are 4 MB, so the page fetches the static file instead of embedding it in the HTML.
 export default function Replay() {
   const [data, setData] = useState<Data | null>(null);
@@ -99,12 +132,7 @@ export default function Replay() {
         The vessel positions could not be loaded. Reload the page.
       </p>
     );
-  if (!data)
-    return (
-      <p aria-live="polite" className="p-6 text-sm text-muted-foreground">
-        Loading five days of vessel positions...
-      </p>
-    );
+  if (!data) return <LoadingScreen />;
   return <ReplayView data={data} />;
 }
 
@@ -126,6 +154,7 @@ function ReplayView({ data }: { data: Data }) {
   const [overlay, setOverlay] = useState(true);
   const [collapsed, setCollapsed] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [panelWidth, setPanelWidth] = useState(PANEL_DEFAULT);
   const [filter, setFilter] = useFilter();
   const [entries, setEntries] = useState<Entry[]>([]);
   const [mode, setMode] = useState<Mode>("replay");
@@ -522,12 +551,14 @@ function ReplayView({ data }: { data: Data }) {
         counts={{ water: inWater, alerts: entries.length }}
         collapsed={collapsed}
         onCollapse={setCollapsed}
+        onWidth={setPanelWidth}
         footer={footer}
       />
       {/* Slides over the column, the same size, so the map keeps its room; invisible when closed keeps it out of the tab order. */}
       <aside
         aria-label="Filters and charts"
-        className={`absolute top-[76px] bottom-0 left-0 z-30 w-80 space-y-4 overflow-y-auto border-r bg-background p-3 shadow-xl transition-all duration-300 ease-out motion-reduce:transition-none ${menuOpen ? "" : "invisible -translate-x-full"}${overlay ? "" : " hidden"}`}
+        style={{ width: panelWidth }}
+        className={`absolute top-[76px] bottom-0 left-0 z-30 space-y-4 overflow-y-auto border-r bg-background p-3 shadow-xl transition-all duration-300 ease-out motion-reduce:transition-none ${menuOpen ? "" : "invisible -translate-x-full"}${overlay ? "" : " hidden"}`}
       >
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold">Filters and charts</h2>

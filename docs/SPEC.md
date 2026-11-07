@@ -67,6 +67,8 @@ Modules (unchanged from the MVP):
 - `lib/vessel.ts`, `lib/config.ts`, `lib/live.ts`, `lib/data.ts`, `app/actions.ts`: as before, plus `vessel.shownStatus` (an unlisted vessel that crossed in shows as suspicious) and `config.moveTo` (one list at a time).
 - `lib/storage.ts`: `readConfig`, `writeConfig`, `readEmail`, `writeEmail` over a storage-like object, tested with a fake; the two hooks wrap them.
 - `lib/status.ts`: the word shown for each status (`priority` is shown as "approved").
+- `lib/theme.ts`: `resolveTheme(saved, systemDark)`; the saved sun/moon choice wins, otherwise the system preference. `components/useTheme.ts` applies it through the `dark` class on `<html>`, and an inline script in the layout does the same before first paint.
+- `lib/panel.ts`: the side column's width limits and its saved width; the filters drawer takes the column's width so the two never show side by side.
 - `lib/radar.ts`: four proposed shore radar sites and a range, drawn as dashed circles when the Radar switch is on; labelled "Proposed radar" on the map, because they are hypothetical.
 
 ## Look

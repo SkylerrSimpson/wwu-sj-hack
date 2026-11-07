@@ -28,6 +28,7 @@ export type SidePanelProps = {
   collapsed: boolean;
   footer?: ReactNode;
   onCollapse: (b: boolean) => void;
+  onWidth?: (width: number) => void;
   className?: string;
 };
 
@@ -45,6 +46,7 @@ export default function SidePanel({
   onTab,
   collapsed,
   onCollapse,
+  onWidth,
   footer,
   className,
 }: SidePanelProps) {
@@ -57,6 +59,9 @@ export default function SidePanel({
     window.addEventListener("resize", fit);
     return () => window.removeEventListener("resize", fit);
   }, []);
+  useEffect(() => {
+    onWidth?.(width);
+  }, [width, onWidth]);
   const resize = (w: number, save: boolean) => {
     const next = clampPanelWidth(w, window.innerWidth);
     setWidth(next);

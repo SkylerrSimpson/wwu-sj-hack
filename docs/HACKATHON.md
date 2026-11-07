@@ -47,6 +47,8 @@ Code is a fraction of the points. The rest is understanding the problem, the use
 | **Gate 3, D−0:30** | **Submit: live URL, repo, slides with the video, pitch doc**                                                      |                                                                      |                                                                                                                                  |                                                                                     |
 | D+0:05             | Pitch                                                                                                             | Pitch                                                                |                                                                                                                                  |                                                                                     |
 
+Deploy to Vercel at the first opportunity: the stack is untested there, and a failed deploy at D-1:30 has no time left to fix.
+
 If Gate 1 slips, Skyler draws dots from a hand-written sample. If Gate 2 slips, the test button's email is the demo moment.
 
 Before the repo goes public: `git grep -iE 'password|secret|token|api[_-]?key' -- . ':!pnpm-lock.yaml' ':!data/uv.lock'` prints nothing.

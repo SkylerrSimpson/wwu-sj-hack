@@ -70,7 +70,7 @@ test("newEntries reports the first fix inside after one outside", () => {
     [300, 0.6, 0.6],
   ]);
   expect(newEntries([a], square, 0, 1000)).toEqual([
-    { vesselId: "a", name: "Boat a", t: 200, lon: 0.5, lat: 0.5 },
+    { vesselId: "a", name: "Boat a", t: 200, lon: 0.5, lat: 0.5, status: "suspicious" },
   ]);
 });
 
@@ -122,7 +122,7 @@ test("newEntries lists every entry across vessels in time order", () => {
 test("over the whole recorded window only the synthetic vessel enters Lummi waters", () => {
   const from = Date.parse(data.window.start) / 1000;
   const to = Date.parse(data.window.end) / 1000;
-  expect(newEntries(data.vessels, data.boundary.ring, from, to).map((e) => e.vesselId)).toEqual([
-    "demo",
-  ]);
+  const ids = newEntries(data.vessels, data.boundary.ring, from, to).map((e) => e.vesselId);
+  expect(ids.length).toBeGreaterThan(0);
+  expect(new Set(ids)).toEqual(new Set(["demo"]));
 });

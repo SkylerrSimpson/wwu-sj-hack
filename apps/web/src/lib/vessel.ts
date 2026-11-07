@@ -1,6 +1,13 @@
 import type { Vessel } from "@/lib/data";
 
-export type Entry = { vesselId: string; name: string; t: number; lon: number; lat: number };
+export type Entry = {
+  vesselId: string;
+  name: string;
+  t: number;
+  lon: number;
+  lat: number;
+  status: "suspicious" | "watch";
+};
 
 export function isInside(lon: number, lat: number, ring: number[][]): boolean {
   let inside = false;
@@ -33,7 +40,7 @@ export function newEntries(vessels: Vessel[], ring: number[][], from: number, to
       if (plon === undefined || plat === undefined) continue;
       if (t <= from || t > to) continue;
       if (isInside(lon, lat, ring) && !isInside(plon, plat, ring))
-        entries.push({ vesselId: v.id, name: v.name, t, lon, lat });
+        entries.push({ vesselId: v.id, name: v.name, t, lon, lat, status: "suspicious" });
     }
   }
   return entries.sort((a, b) => a.t - b.t);

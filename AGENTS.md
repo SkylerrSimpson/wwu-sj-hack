@@ -13,7 +13,7 @@ Lummi Vessel Tracker, a prototype for the Lummi Nation, built in one day: Saturd
 
 ## Ownership
 
-Every file has one owner, and only the owner commits it. Work inside your own files; `git add` them by name, never `git add -A`.
+Every file has one owner, and only the owner commits it. Skyler holds every row today; a teammate takes a row by asking. Work inside your own files; `git add` them by name, never `git add -A`.
 
 | File(s)                                                                                          | Owner  | Notes                                                                  |
 | ------------------------------------------------------------------------------------------------ | ------ | ---------------------------------------------------------------------- |

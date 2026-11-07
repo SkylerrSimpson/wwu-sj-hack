@@ -16,10 +16,11 @@ A Lummi Natural Resources enforcement officer (TO CONFIRM: or a Lummi Nation Pol
 
 Ninety seconds, pre-recorded.
 
-1. The officer opens Lummi Vessel Tracker: a map of Lummi waters with the reservation boundary outlined and every ship as a dot, from five recorded days of AIS (Dec 5 to 9 2024). A banner says "Priority list invented for this demo; no vessel shown is suspected of anything."
-2. They press play and the ships move. Priority vessels (the Lummi Island ferry, a patrol boat) carry a badge. Hovering a dot shows a commercial vessel's name, or a private boat's type and length, and whether it's on the priority list.
-3. Their email is saved in the alerts panel. A labeled synthetic vessel, not on the priority list, crosses into Lummi waters. The alert log shows it, and an email arrives: "A vessel not on the priority list entered Lummi waters: Demo vessel (synthetic), 5:12 AM, 48.76 N 122.66 W. Self-reported AIS: corroborate before acting."
-4. On screen throughout: each data source with its date, "Approximate boundary, not a legal boundary", and "Most fishing and recreational boats under 65 ft don't carry AIS; no alert does not mean no unapproved boat was there."
+1. The officer opens Lummi Vessel Tracker: a map of Lummi waters with the reservation boundary outlined and every ship as a dot, from five recorded days of AIS (Dec 5 to 9 2024), coloured by status with the status in the hover text. Beside it, "In Lummi waters now": one row per kind of vessel, for example "Whatcom County ferry: 1", "Law enforcement, listed: 1", "Pleasure craft: 2". A banner says "Priority list invented for this demo; no vessel shown is suspected of anything."
+2. They press play. The clock runs in Pacific time, the dots move, the table updates.
+3. A labeled synthetic vessel, on neither list, crosses into Lummi waters: its dot turns suspicious, the alert log shows it, and an email arrives at the officer's saved address: "A vessel not on the priority list entered Lummi waters: Demo vessel (synthetic), Thu Dec 5, 5:30 AM PST, 48.77 N 122.70 W. Self-reported AIS: corroborate before acting."
+4. The officer clicks the dot and adds it to the watch list. The vessel leaves and crosses in again an hour later: "A vessel on your watch list entered Lummi waters: ...".
+5. On screen throughout: each data source with its date, "Approximate boundary, not a legal boundary", and "Most fishing and recreational boats under 65 ft don't carry AIS; no alert does not mean no unapproved boat was there."
 
 ## Out of scope
 
@@ -32,35 +33,40 @@ Ninety seconds, pre-recorded.
 
 ## Data
 
-| Source                                                                      | What it is                                                                                                | Why                                                                                                 |
-| --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| The event's AIS file (`data/lummifiles/AIS_…csv`)                           | Five days, Dec 5 to 9 2024 UTC, 219,863 positions, 224 vessels, NOAA MarineCadastre format, public domain | The vessel positions; recorded, so the demo can't fail                                              |
-| The event's boundary (`data/lummifiles/Lummi_Reservation_Boundary (1).kml`) | One ring, 132 points, about 24,068 acres                                                                  | Lummi waters. On all 219,863 positions it agrees with the Census Bureau's reservation polygon.      |
-| The priority list                                                           | Ours, invented for the demo: the ferry, the patrol boat                                                   | The real list is the Nation's                                                                       |
-| One synthetic vessel                                                        | Ours, labeled                                                                                             | Real data has no non-priority vessel entering; this one shows an alert without accusing a real boat |
+| Source                                                                                                      | What it is                                                                                                                                | Why                                                                                                                                                                     |
+| ----------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The event's AIS file (`data/lummifiles/AIS_…csv`, committed reduced as `data/raw/ais-2024-12-05-to-09.zip`) | Five days, Dec 5 to 9 2024 UTC, 219,863 positions, 224 vessels, NOAA MarineCadastre format, public domain                                 | The vessel positions; recorded, so the demo can't fail                                                                                                                  |
+| The event's boundary (`data/raw/lummi-reservation-boundary.kml`)                                            | One ring, 132 points, about 24,068 acres                                                                                                  | Lummi waters. On all 219,863 positions it agrees with the Census Bureau's reservation polygon.                                                                          |
+| The priority patterns and list                                                                              | `XWL`, `WSF`, `SWN`, `NKK` in an AIS name or call sign (the PM's rule), plus an explicit list: the Lummi Island ferry and the patrol boat | Known vessels that never alert; the Nation would own the real list                                                                                                      |
+| One synthetic vessel                                                                                        | Ours, labeled                                                                                                                             | Real data has no non-priority vessel entering; this one crosses in twice, so the demo shows a suspicious alert and then a watch-list alert without accusing a real boat |
 
 The contract is `data/schema.json`. `data.json` holds:
 
 - `sources`: each with `id`, `name`, `url`, `retrieved`
 - `window`: `start` and `end`, ISO UTC
 - `boundary`: `source` and `ring`, a list of `[lon, lat]`
-- `vessels`: each with `id`, `source`, `name`, `type` (in words), `length_m` (number or null), `priority` (true or false), and `track`, a list of `[time, lon, lat]` with time in Unix seconds, one position per 5 minutes, duplicates removed
+- `vessels`: each with `id`, `source`, `name`, `type` (in words), `length_m` (number or null), `fleet` (a string such as "Lummi Nation", "Washington State Ferries", "Swinomish", "Nooksack", "Whatcom County ferry", or null), `priority` (true exactly when `fleet` is set), and `track`, a list of `[time, lon, lat]` with time in Unix seconds, one position per 5 minutes, duplicates removed
 
-Commercial vessels keep their AIS name. Private boats (AIS types 36 and 37) are named by type and length only, such as "Pleasure craft, 10 m", because `data/AGENTS.md` keeps personal data out of `data.json`.
+Private boats (sailing, pleasure craft and fishing, AIS types 36, 37 and 30) are anonymised: named by type and length, such as "Fishing, 24 m", with ids `private-1`, `private-2`, and so on; the committed raw file has their names, IMO and call signs blanked. Tugs, ferries, cargo ships and tankers keep their AIS names. `data/AGENTS.md` keeps personal data out of the public files.
 
 ## Shape
 
-- `/` (`app/page.tsx`, Skyler): the map, the replay controls, the alerts panel, and the banner, caveats and sources in `app/layout.tsx`.
-- `components/Replay.tsx` (Skyler): client; `<Replay data={data} />`; runs the clock, calls `newEntries` each tick, renders the map, the sources, and passes new entries to the alerts panel.
-- `components/ShipMap.tsx` (Skyler): client; Leaflet and OpenStreetMap, the boundary, one dot per vessel at the clock's time.
-- `lib/data.ts` (Skyler): the `data.json` types.
-- `lib/vessel.ts` (Nathan), each function tested first:
-  - `positionAt(track, t)` → `[lon, lat]` or `null`: the last position at or before `t`; `null` before the first, or more than 30 minutes after the last
+- `/` (`app/page.tsx`): the map, the controls, the table, the lists panel and the alerts panel, with the banner, caveats and sources in `app/layout.tsx`.
+- `components/Replay.tsx`: client; `<Replay data={data} />`. Owns the clock (`t`, `playing`, `speed`), the officer's lists (local storage), the selected vessel and the entries. Every 250 ms while playing it advances `t` by `speed / 4`, asks `lib/vessel` for positions, the in-water summary and new entries over `(prevT, t]` (prevT held in a ref, so re-renders and scrubbing never re-fire), and hands entries to the alerts panel.
+- `components/ShipMap.tsx`: client; `{ ring, ships, onSelect }`; Leaflet on a canvas renderer, one marker per vessel moved in place each tick, coloured by status with the status in the tooltip; clicking a dot selects it.
+- `components/ListsPanel.tsx`: client; `{ vessels, lists, selected, onChange }`; a dropdown of vessels, "Add to priority" and "Add to watch list", and both lists with a remove button each.
+- `components/AlertPanel.tsx`: client; `{ entries }`; the email box (validated, saved in the browser), "Send test alert", one email per entry keyed by vessel and time, a log of every attempt and its result.
+- `app/actions.ts`: `sendAlert(to, entry)` → `{ ok: true } | { ok: false, error }`; a server function; checks the address, sends through Resend with wording by status.
+- `lib/data.ts`: the `data.json` types.
+- `lib/vessel.ts`, each function tested first:
+  - `Lists = { priority: Set<string>; watch: Set<string> }`: the officer's additions by vessel id
+  - `vesselStatus(v, lists)` → `"priority" | "watch" | "unlisted"`: watch if on the watch list; else priority if `v.priority` or on the priority list; else unlisted
   - `isInside(lon, lat, ring)` → `boolean`
-  - `newEntries(vessels, ring, from, to)` → `Entry[]`: each position of a non-priority vessel with time in (`from`, `to`] that is inside, where the vessel's previous position was outside. `Entry` is `{ vesselId, name, t, lon, lat }`.
-- `app/actions.ts` (Luke): `sendAlert(to, entry)` → `{ ok: true }` or `{ ok: false, error }`; a server function; checks the address, sends through Resend.
-- `components/AlertPanel.tsx` (Luke): client; `<AlertPanel entries={newEntries} />`; the email box, saved in the browser; one email per new entry; a test button; the alert log.
-- The browser remembers: the alert email (local storage) and the replay time (in memory).
+  - `positionAt(track, t)` → `[lon, lat]` or `null`: the last fix at or before `t`, or `null` when that fix is more than 30 minutes old or `t` is before the first
+  - `newEntries(vessels, ring, from, to, lists)` → `Entry[]`: each position with time in `(from, to]` that is inside while the previous was outside, for vessels whose status is not priority; `Entry` is `{ vesselId, name, t, lon, lat, status }` with status `"suspicious"` (unlisted) or `"watch"`
+  - `inLummiWaters(vessels, ring, t, lists)` → `{ vessel, status, lon, lat }[]`: every vessel with a position inside at `t`
+  - `summary(inWater)` → `{ label, count, names }[]`: grouped by `fleet` when set, else by `type`, with watch and suspicious rows first
+- The browser remembers: the alert email and the officer's lists (local storage), the replay time (in memory).
 
 ## Risks and safeguards
 
@@ -78,7 +84,7 @@ Commercial vessels keep their AIS name. Private boats (AIS types 36 and 37) are 
 ## Glossary
 
 - **Lummi waters**: the boundary polygon.
-- **Vessel**: one AIS transmitter (MMSI) and its track.
-- **Priority list**: vessels that never alert; invented for the demo.
-- **Entry**: a non-priority vessel's first position inside Lummi waters after one outside.
-- **Alert**: the email and log line one entry produces.
+- **Priority vessel**: a vessel allowed in Lummi waters, which never alerts: its AIS name or call sign contains `XWL`, `WSF`, `SWN` or `NKK`, or it is on the explicit list, or the officer added it. A vessel on neither list is unlisted.
+- **Watch list**: vessels the officer has asked to be alerted about. The tool never calls a vessel an offender; that is the officer's call.
+- **Suspicious**: an unlisted vessel that has entered Lummi waters.
+- **Entry**: a non-priority vessel's first position inside Lummi waters after one outside; each entry produces one alert.

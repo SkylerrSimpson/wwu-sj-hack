@@ -1,6 +1,14 @@
 import { expect, test } from "vitest";
 import { DEFAULT_CONFIG, type Config } from "./config";
-import { readConfig, readEmail, writeConfig, writeEmail, type StorageLike } from "./storage";
+import {
+  readConfig,
+  readEmail,
+  readPanelWidth,
+  writeConfig,
+  writeEmail,
+  writePanelWidth,
+  type StorageLike,
+} from "./storage";
 
 const fake = (entries: [string, string][] = []) => {
   const map = new Map(entries);
@@ -53,4 +61,15 @@ test("a storage that throws reads as empty and drops writes without throwing", (
   expect(readEmail(throwing)).toBe("");
   expect(() => writeConfig(throwing, DEFAULT_CONFIG)).not.toThrow();
   expect(() => writeEmail(throwing, "staff@example.org")).not.toThrow();
+});
+
+test("readPanelWidth is null when missing or not a number, and writePanelWidth stores under panelWidth", () => {
+  expect(readPanelWidth(fake().storage)).toBeNull();
+  expect(readPanelWidth(fake([["panelWidth", "wide"]]).storage)).toBeNull();
+  const { map, storage } = fake();
+  writePanelWidth(storage, 420);
+  expect([...map.entries()]).toEqual([["panelWidth", "420"]]);
+  expect(readPanelWidth(storage)).toBe(420);
+  expect(readPanelWidth(throwing)).toBeNull();
+  expect(() => writePanelWidth(throwing, 420)).not.toThrow();
 });

@@ -7,6 +7,7 @@ export type StorageLike = {
 
 const CONFIG_KEY = "vesselConfig";
 const EMAIL_KEY = "alertEmail";
+const PANEL_KEY = "panelWidth";
 
 // Storage can throw (private mode, quota, blocked); it then reads as empty and drops writes.
 const read = (storage: StorageLike, key: string): string | null => {
@@ -34,3 +35,11 @@ export const readEmail = (storage: StorageLike): string => read(storage, EMAIL_K
 
 export const writeEmail = (storage: StorageLike, email: string): void =>
   write(storage, EMAIL_KEY, email);
+
+export const readPanelWidth = (storage: StorageLike): number | null => {
+  const n = Number.parseInt(read(storage, PANEL_KEY) ?? "", 10);
+  return Number.isNaN(n) ? null : n;
+};
+
+export const writePanelWidth = (storage: StorageLike, width: number): void =>
+  write(storage, PANEL_KEY, String(width));

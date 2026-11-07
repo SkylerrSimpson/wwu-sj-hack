@@ -2,6 +2,7 @@ import asyncio
 import json
 import time
 from collections.abc import Awaitable, Callable
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -344,6 +345,19 @@ def test_a_duplicate_and_a_report_from_the_future_are_not_archived(tmp_path: Pat
         assert service.recorder is not None
         service.recorder.flush()
         assert service.recorder.summary()["written"] == 1
+
+    with_archive(tmp_path, scenario)
+
+
+def test_a_last_known_position_shows_live_but_is_not_history(tmp_path: Path) -> None:
+    async def scenario(client: Any, service: Service) -> None:
+        now = time.time()
+        service.ingest(replace(position(heard_at=now), last_known=True), now)
+        [vessel] = (await (await client.get("/v1/vessels")).json())["vessels"]
+        assert vessel["flags"] == ["last_known_position"]
+        assert service.recorder is not None
+        service.recorder.flush()
+        assert service.recorder.summary()["written"] == 0
 
     with_archive(tmp_path, scenario)
 

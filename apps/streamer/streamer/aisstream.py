@@ -139,9 +139,31 @@ def parse_static(kind: str, body: dict[str, Any], mmsi: int, heard: float) -> St
     )
 
 
+def last_known_position(kind: str, meta: dict[str, Any], heard: float) -> Position | None:
+    """A static message's metadata has only the last position the provider knew, of unknown age.
+    It agreed with a second source within 10 m for moored boats, but says nothing about a mover."""
+    lat, lon = float(meta["latitude"]), float(meta["longitude"])
+    if not (-90 <= lat <= 90 and -180 <= lon <= 180) or (lat == 0 and lon == 0):
+        return None
+    return Position(
+        mmsi=int(meta["MMSI"]),
+        vessel_class="A" if kind == "ShipStaticData" else "B",
+        lat=round(lat, 6),
+        lon=round(lon, 6),
+        sog_kn=None,
+        cog_deg=None,
+        heading_deg=None,
+        nav_status=None,
+        high_accuracy=None,
+        transmit_second=None,
+        heard_at=heard,
+        name=clean(str(meta.get("ShipName", ""))),
+        last_known=True,
+    )
+
+
 def parse(raw: str | bytes) -> list[Report]:
-    """The reports in one provider message. A position's fields come from the body, because a
-    static message's metadata carries only the last position the provider knew."""
+    """The reports in one provider message, identity before position."""
     try:
         data = json.loads(raw)
     except ValueError:
@@ -160,7 +182,9 @@ def parse(raw: str | bytes) -> list[Report]:
         body = data["Message"][kind]
         heard = parse_time(meta["time_utc"])
         if kind in STATIC_KINDS:
-            return [parse_static(kind, body, int(meta["MMSI"]), heard)]
+            static = parse_static(kind, body, int(meta["MMSI"]), heard)
+            known = last_known_position(kind, meta, heard)
+            return [static] if known is None else [static, known]
         position = parse_position(kind, body, meta, heard)
         if kind == "ExtendedClassBPositionReport":
             return [position, parse_static("ShipStaticData", body, position.mmsi, heard)]

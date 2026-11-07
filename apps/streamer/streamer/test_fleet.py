@@ -187,3 +187,38 @@ def test_prune_forgets_vessels_not_heard_for_a_long_time() -> None:
     assert f.prune(before=T0 + 50) == 1
     assert len(f.snapshot(now=T0 + 100)) == 1
     assert len(f) == 1
+
+
+def test_a_last_known_position_fills_a_blank_with_a_flag() -> None:
+    f = fleet()
+    record, outcome = f.apply(position(last_known=True, sog_kn=None), received_at=T0)
+    assert outcome == "last_known"
+    assert record is not None
+    assert record["flags"] == ["last_known_position"]
+
+
+def test_a_last_known_position_cant_replace_a_real_one() -> None:
+    f = fleet()
+    f.apply(position(T0, lat=48.70), received_at=T0)
+    record, outcome = f.apply(position(T0 + 60, lat=48.75, last_known=True), received_at=T0 + 60)
+    assert (record, outcome) == (None, "last_known_ignored")
+    [current] = f.snapshot(now=T0 + 60)
+    assert current["lat"] == 48.70
+    assert current["flags"] == []
+
+
+def test_a_real_report_always_replaces_a_last_known_position() -> None:
+    f = fleet()
+    f.apply(position(T0 + 60, lat=49.5, last_known=True), received_at=T0 + 60)
+    record, outcome = f.apply(position(T0, lat=48.70), received_at=T0 + 61)
+    assert outcome == "position"
+    assert record is not None
+    assert record["flags"] == []
+    assert record["lat"] == 48.70
+
+
+def test_a_repeated_last_known_position_publishes_nothing() -> None:
+    f = fleet()
+    f.apply(position(T0, last_known=True), received_at=T0)
+    record, outcome = f.apply(position(T0 + 360, last_known=True), received_at=T0 + 360)
+    assert (record, outcome) == (None, "last_known_unchanged")

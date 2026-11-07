@@ -45,6 +45,8 @@ class Position:
     transmit_second: int | None
     heard_at: float
     name: str | None
+    # From a static message's metadata: where the provider last placed it, of unknown age.
+    last_known: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -226,6 +228,15 @@ class Fleet:
             return None, "future_time"
         vessel = self._vessel(report.mmsi, report.heard_at)
         previous = vessel.position
+        if report.last_known and previous is not None:
+            # It only fills a blank: anything a vessel actually reported is better.
+            if not previous.last_known:
+                return None, "last_known_ignored"
+            if (previous.lat, previous.lon) == (report.lat, report.lon):
+                return None, "last_known_unchanged"
+        if previous is not None and previous.last_known:
+            # Its age is unknown, so it can't make a real report stale or look like a jump.
+            previous = None
         if previous is not None:
             if report.heard_at < previous.heard_at:
                 return None, "stale"
@@ -234,6 +245,8 @@ class Fleet:
         # Flagged, not hidden: a jump can be bad GPS or a spoofed identity, and an officer
         # should see either one.
         flags = ["position_jump"] if previous is not None and is_jump(previous, report) else []
+        if report.last_known:
+            flags.append("last_known_position")
         if not 200_000_000 <= report.mmsi <= 799_999_999:
             flags.append("nonstandard_mmsi")
         vessel.position = report
@@ -241,7 +254,7 @@ class Fleet:
         vessel.flags = flags
         vessel.last_heard = max(vessel.last_heard, report.heard_at)
         vessel.name = vessel.name or report.name
-        return self._record(vessel), "position"
+        return self._record(vessel), "last_known" if report.last_known else "position"
 
     def _apply_static(self, report: Static, received_at: float) -> tuple[VesselRecord | None, str]:
         vessel = self._vessel(report.mmsi, min(report.heard_at, received_at))

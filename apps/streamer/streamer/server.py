@@ -172,9 +172,13 @@ class Service:
     def ingest(self, report: Report, received_at: float) -> None:
         record, outcome = self.fleet.apply(report, received_at)
         self.health.counts[outcome] += 1
-        # A late report is too old for the live map but is still history. A duplicate or a clock
-        # from the future isn't.
-        if self.recorder is not None and outcome not in ("duplicate", "future_time"):
+        # A late report is too old for the live map but is still history. A duplicate, a clock
+        # from the future, or a position of unknown age isn't.
+        if (
+            self.recorder is not None
+            and outcome not in ("duplicate", "future_time")
+            and not (isinstance(report, Position) and report.last_known)
+        ):
             flags = record["flags"] if record is not None else []
             self.recorder.add(report, received_at, flags, aisstream.SOURCE)
         if outcome == "position" and isinstance(report, Position):

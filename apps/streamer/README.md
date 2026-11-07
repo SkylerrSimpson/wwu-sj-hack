@@ -106,6 +106,7 @@ Use `id` to follow a vessel. `null` means the vessel didn't report that value; i
 - **Say "no vessels heard", never "no vessels present".** Boats without AIS never appear, and a short crossing can fall between updates. Snapshots carry this wording in `coverage`.
 - **Show the feed status.** On `stale` or `down`, say the map isn't current.
 - **Show `flags`.** `position_jump` is a move no vessel could make, and `nonstandard_mmsi` is an identity no vessel should have. Either can be bad data or a false identity, so they aren't evidence on their own.
+- **Mark `last_known_position`, and leave it out of alerts.** The vessel's own position reports haven't reached this feed, so the dot is the provider's last known place, of unknown age. It's usually a moored boat, but a moving one could be well away from it. These are never stored in history.
 
 ## What it hides
 

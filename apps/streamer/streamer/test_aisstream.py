@@ -63,7 +63,7 @@ def only_position(raw: str) -> Position:
 
 
 def only_static(raw: str) -> Static:
-    [report] = aisstream.parse(raw)
+    report = aisstream.parse(raw)[0]
     assert isinstance(report, Static)
     return report
 
@@ -210,6 +210,34 @@ def test_static_report_part_b_carries_type_and_length() -> None:
         )
     )
     assert (s.name, s.callsign, s.type_code, s.length_m) == (None, "WAB9999", 37, 10)
+
+
+STATIC_A = {
+    "Name": "TEST SHIP",
+    "CallSign": "",
+    "Type": 60,
+    "Dimension": {"A": 1, "B": 1, "C": 1, "D": 1},
+    "Valid": True,
+}
+
+
+def test_a_static_message_also_gives_a_last_known_position() -> None:
+    static, known = aisstream.parse(message("ShipStaticData", STATIC_A))
+    assert isinstance(static, Static)
+    assert isinstance(known, Position)
+    assert known.last_known is True
+    assert (known.lat, known.lon, known.vessel_class) == (48.72345, -122.67741, "A")
+    assert (known.sog_kn, known.cog_deg, known.transmit_second) == (None, None, None)
+
+
+def test_a_static_message_without_a_real_position_gives_only_identity() -> None:
+    for meta in [{"latitude": 0, "longitude": 0}, {"latitude": 95, "longitude": 0}]:
+        [static] = aisstream.parse(message("ShipStaticData", STATIC_A, **meta))
+        assert isinstance(static, Static)
+
+
+def test_a_real_position_is_never_marked_last_known() -> None:
+    assert only_position(message("PositionReport", class_a())).last_known is False
 
 
 def test_extended_class_b_is_both_a_position_and_static() -> None:

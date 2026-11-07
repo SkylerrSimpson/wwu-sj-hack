@@ -122,6 +122,12 @@ def test_raw_ais_carries_no_name_imo_or_call_sign_for_private_types() -> None:
     )
 
 
+def test_raw_ais_pseudonymises_private_boats_mmsi() -> None:
+    """A real MMSI is nine digits; the zip carries P0001.. instead, one per private boat."""
+    private = {r["MMSI"] for r in fetch()[0] if r["VesselType"] in {"30", "36", "37"}}
+    assert private == {f"P{n:04}" for n in range(1, len(private) + 1)}
+
+
 def test_build_output_matches_the_schema() -> None:
     assert problems_in(build()) == []
 

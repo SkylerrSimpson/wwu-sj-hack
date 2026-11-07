@@ -14,3 +14,6 @@ __pycache__/
 apps/web/AGENTS.md
 data/lummifiles/
 .claude/worktrees/
+data/Lummi_Reservation_Boundary.kml
+data/TugsAtCherryPointIndustries_20251209112623.jpg
+data/example_kml_usage.txt

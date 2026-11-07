@@ -12,7 +12,7 @@ Anyone who uses this data will ask: where did it come from, how clean is it, wha
 
 `data/raw/` holds the event's AIS file zipped and the KML as given. The organizers' files arrived with their names swapped (the `.jpg` was the KML, the `.txt` was the CSV); `raw/` uses the names of what they are.
 
-The committed zip is not the original byte for byte: a one-off script (not in `build.py`) read the event's CSV, blanked `VesselName`, `IMO` and `CallSign` on every row whose `VesselType` is 30, 36 or 37 (fishing, sailing, pleasure craft), kept every other column and all 219,863 rows, and wrote the result as the single entry `ais-2024-12-05-to-09.csv`, deflate level 9. The original stays in `data/lummifiles/`, which git ignores. A test reads the zip and refuses any private row with a name, IMO or call sign.
+The committed zip is not the original byte for byte: a one-off script (not in `build.py`) read the event's CSV, blanked `VesselName`, `IMO` and `CallSign` on every row whose `VesselType` is 30, 36 or 37 (fishing, sailing, pleasure craft), replaced the `MMSI` of those rows with a pseudonym `P0001` to `P0147` (one per boat, numbered in sorted-MMSI order, so `build.py`'s sort by MMSI gives the same `private-n` ids), kept every other column and all 219,863 rows in their order, and wrote the result as the single entry `ais-2024-12-05-to-09.csv`, deflate level 9. The original stays in `data/lummifiles/`, which git ignores. Tests read the zip and refuse any private row with a name, IMO, call sign or nine-digit MMSI.
 
 ## Cleaning
 

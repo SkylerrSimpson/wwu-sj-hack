@@ -25,7 +25,10 @@ export type SidePanelProps = {
   // Leave both out and the panel keeps the open tab itself.
   tab?: SidePanelTab;
   onTab?: (t: SidePanelTab) => void;
-  collapsed: boolean;
+  // null leaves it to the screen: hidden on a phone, open from md up.
+  collapsed: boolean | null;
+  // False hides the column, the strip and the phone button, as when the controls are hidden.
+  shown?: boolean;
   footer?: ReactNode;
   onCollapse: (b: boolean) => void;
   onWidth?: (width: number) => void;
@@ -45,6 +48,7 @@ export default function SidePanel({
   tab,
   onTab,
   collapsed,
+  shown = true,
   onCollapse,
   onWidth,
   footer,
@@ -93,11 +97,12 @@ export default function SidePanel({
   };
 
   // The strip and the column are both always mounted: the alert pane remembers what it has sent.
+  // From md up, a hidden column leaves a strip along the edge to bring it back.
   const strip = (
     <div
       className={cn(
         "flex w-10 flex-col items-center border-r bg-background py-2",
-        collapsed ? "" : "hidden",
+        collapsed === true && shown ? "max-md:hidden" : "hidden",
         className,
       )}
     >
@@ -118,9 +123,25 @@ export default function SidePanel({
       </Tooltip>
     </div>
   );
+  // On a phone the column starts hidden; a small button in the map's top corner brings it out.
+  const phoneButton = (
+    <Button
+      size="icon"
+      variant="outline"
+      aria-label="Show panel"
+      onClick={() => onCollapse(false)}
+      className={cn(
+        "fixed top-[calc(var(--chrome-h,76px)+0.75rem)] left-3 z-20 size-10 bg-background shadow-md md:hidden",
+        collapsed === false || !shown ? "hidden" : "",
+      )}
+    >
+      <PanelLeftOpen />
+    </Button>
+  );
   return (
     <>
       {strip}
+      {phoneButton}
       <Tabs
         defaultValue="water"
         value={tab}
@@ -128,7 +149,7 @@ export default function SidePanel({
         style={{ width }}
         className={cn(
           "gap-0 border-r bg-background animate-in fade-in slide-in-from-left-2 duration-200 motion-reduce:animate-none",
-          collapsed ? "hidden" : "",
+          !shown || collapsed === true ? "hidden" : collapsed === null ? "max-md:hidden" : "",
           className,
         )}
       >
@@ -190,7 +211,7 @@ export default function SidePanel({
             key={key}
             value={key}
             keepMounted
-            className="min-h-0 flex-1 overflow-y-auto p-3 animate-in fade-in duration-200 motion-reduce:animate-none"
+            className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 animate-in fade-in duration-200 motion-reduce:animate-none"
           >
             {panes[key]}
           </TabsContent>

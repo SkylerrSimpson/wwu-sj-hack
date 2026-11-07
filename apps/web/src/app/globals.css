@@ -164,6 +164,11 @@
   html {
     @apply font-sans;
   }
+  /* No rubber-band bounce: on a phone it slid the map page under the fixed top bar. */
+  html,
+  body {
+    overscroll-behavior: none;
+  }
 }
 
 @layer base {

@@ -122,7 +122,7 @@ export default function ConfigPanel({
               <TableRow>
                 <TableHead>Text</TableHead>
                 <TableHead>Label</TableHead>
-                <TableHead>Matches</TableHead>
+                <TableHead className="max-sm:hidden">Matches</TableHead>
                 <TableHead className="w-0" />
               </TableRow>
             </TableHeader>
@@ -130,8 +130,16 @@ export default function ConfigPanel({
               {config.patterns.map((p) => (
                 <TableRow key={p.text}>
                   <TableCell className="font-mono">{p.text}</TableCell>
-                  <TableCell>{p.label}</TableCell>
-                  <TableCell>{p.field === "callsign" ? "Call sign" : "Name"}</TableCell>
+                  {/* On a phone the Matches column folds under the label, so Remove stays in view. */}
+                  <TableCell className="whitespace-normal">
+                    {p.label}
+                    <span className="block text-xs text-muted-foreground sm:hidden">
+                      Matches {p.field === "callsign" ? "call sign" : "name"}
+                    </span>
+                  </TableCell>
+                  <TableCell className="max-sm:hidden">
+                    {p.field === "callsign" ? "Call sign" : "Name"}
+                  </TableCell>
                   <TableCell className="text-right">
                     <Button variant="outline" size="sm" onClick={() => removePattern(p.text)}>
                       Remove

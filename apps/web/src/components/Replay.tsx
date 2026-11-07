@@ -67,6 +67,14 @@ type Feed = { status: string; last_message_age_s: number | null };
 // When the browser last heard anything from the streamer, so the age on screen keeps counting.
 type Heard = number | null;
 
+// For a phone's top bar: no weekday or time zone, so the slider keeps its width.
+const clockShort = new Intl.DateTimeFormat("en-US", {
+  timeZone: "America/Los_Angeles",
+  month: "short",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+});
 const clock = new Intl.DateTimeFormat("en-US", {
   timeZone: "America/Los_Angeles",
   weekday: "short",
@@ -99,7 +107,7 @@ const yearPacific = new Intl.DateTimeFormat("en-US", {
 // The shape of the screen, pulsing, while the 4 MB of tracks download.
 function LoadingScreen() {
   return (
-    <div className="relative h-dvh w-full overflow-hidden" aria-busy="true">
+    <div className="fixed inset-0 overflow-hidden" aria-busy="true">
       <span className="sr-only" aria-live="polite">
         Loading vessel positions
       </span>
@@ -113,7 +121,7 @@ function LoadingScreen() {
       </div>
       <Skeleton className="fixed inset-x-0 top-12 h-7 rounded-none" />
       <Skeleton className="absolute inset-0 top-[76px] rounded-none" />
-      <div className="absolute top-[76px] bottom-0 left-0 w-80 space-y-3 border-r bg-background p-3">
+      <div className="absolute top-[76px] bottom-0 left-0 w-80 space-y-3 border-r bg-background p-3 max-md:hidden">
         <div className="flex gap-2">
           {[0, 1, 2, 3].map((i) => (
             <Skeleton key={i} className="h-8 flex-1" />
@@ -165,7 +173,8 @@ function ReplayView({ data }: { data: Data }) {
   const [showPaths, setShowPaths] = useState(false);
   const [radarOn, setRadarOn] = useState(false);
   const [overlay, setOverlay] = useState(true);
-  const [collapsed, setCollapsed] = useState(false);
+  // null: hidden on a phone, open from md up, until the user opens or hides it.
+  const [collapsed, setCollapsed] = useState<boolean | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [panelWidth, setPanelWidth] = useState(PANEL_DEFAULT);
   const [filter, setFilter] = useFilter();
@@ -529,7 +538,7 @@ function ReplayView({ data }: { data: Data }) {
   );
 
   return (
-    <div className="relative h-dvh w-full overflow-hidden">
+    <div className="fixed inset-0 overflow-hidden">
       <ShipMap
         className="absolute inset-0 isolate z-0"
         ring={data.boundary.ring}
@@ -559,6 +568,7 @@ function ReplayView({ data }: { data: Data }) {
         onSeek={setT}
         onSkip={demoStart === undefined ? undefined : () => setT(demoStart - 300)}
         clockText={clock.format(at * 1000)}
+        clockShort={clockShort.format(at * 1000)}
         feedText={feedText}
         feedLive={mode === "live" && feed?.status === "live"}
         showPaths={showPaths}
@@ -572,7 +582,8 @@ function ReplayView({ data }: { data: Data }) {
         banner={BANNER}
       />
       <SidePanel
-        className={`absolute top-[var(--chrome-h,76px)] bottom-0 left-0 z-20${overlay ? "" : " hidden"}`}
+        className="absolute top-[var(--chrome-h,76px)] bottom-0 left-0 z-20"
+        shown={overlay}
         panes={{ water, lists: listsPane, alerts: <AlertPanel entries={entries} />, vessel }}
         counts={{ water: inWater, alerts: entries.length }}
         collapsed={collapsed}
@@ -585,7 +596,7 @@ function ReplayView({ data }: { data: Data }) {
         aria-label="Filters and charts"
         // At least 384 px so the pie legend stays on one line.
         style={{ width: Math.max(panelWidth, 384) }}
-        className={`absolute top-[var(--chrome-h,76px)] bottom-0 left-0 z-30 space-y-4 overflow-y-auto border-r bg-background p-3 shadow-xl transition-all duration-300 ease-out motion-reduce:transition-none ${menuOpen ? "" : "invisible -translate-x-full"}${overlay ? "" : " hidden"}`}
+        className={`absolute top-[var(--chrome-h,76px)] bottom-0 left-0 z-30 max-w-full space-y-4 overflow-y-auto overscroll-contain border-r bg-background p-3 shadow-xl transition-all duration-300 ease-out motion-reduce:transition-none ${menuOpen ? "" : "invisible -translate-x-full"}${overlay ? "" : " hidden"}`}
       >
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold">Filters and charts</h2>

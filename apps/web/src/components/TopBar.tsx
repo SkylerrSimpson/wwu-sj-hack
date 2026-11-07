@@ -23,6 +23,8 @@ export type TopBarProps = {
   onSeek: (t: number) => void;
   onSkip?: () => void;
   clockText: string;
+  // The same time, shorter, for a phone
+  clockShort?: string;
   feedText?: string;
   feedLive?: boolean;
   showPaths: boolean;
@@ -197,7 +199,10 @@ export default function TopBar(p: TopBarProps) {
               {p.feedText}
             </span>
           )}
-          <span className="font-mono text-sm tabular-nums whitespace-nowrap">{p.clockText}</span>
+          <span className="font-mono text-sm tabular-nums whitespace-nowrap">
+            <span className={p.clockShort ? "max-sm:hidden" : ""}>{p.clockText}</span>
+            {p.clockShort && <span className="sm:hidden">{p.clockShort}</span>}
+          </span>
         </div>
 
         <div className="ml-auto flex items-center gap-3">

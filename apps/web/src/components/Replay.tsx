@@ -556,7 +556,7 @@ function ReplayView({ data }: { data: Data }) {
           Click a dot on the map to approve or watch a vessel.
         </p>
       )}
-      <Button size="sm" variant="outline" render={<Link href="/settings" />}>
+      <Button size="sm" variant="outline" nativeButton={false} render={<Link href="/settings" />}>
         Edit patterns and lists in Settings
       </Button>
     </div>

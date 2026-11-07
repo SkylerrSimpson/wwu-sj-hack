@@ -1,13 +1,12 @@
-import Link from "next/link";
+import type { Metadata } from "next";
+import SignIn from "@/components/SignIn";
 
-// Placeholder until the sign-in screen lands; the map lives at /map.
-export default function Landing() {
+export const metadata: Metadata = { title: "Sign in, Lummi Vessel Tracker" };
+
+export default function Page() {
   return (
-    <main className="mx-auto w-full max-w-5xl flex-1 p-4">
-      <h1 className="text-2xl font-semibold">Lummi Vessel Tracker</h1>
-      <Link className="underline" href="/map">
-        Open the map
-      </Link>
+    <main className="flex flex-1 items-center justify-center bg-muted p-4">
+      <SignIn />
     </main>
   );
 }

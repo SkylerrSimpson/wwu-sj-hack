@@ -292,7 +292,7 @@ function ReplayView({ data }: { data: Data }) {
                   {STATUS_WORD[r.status]}
                 </Badge>
               </TableCell>
-              <TableCell>
+              <TableCell className="whitespace-normal break-words">
                 {r.label}
                 <span className="block text-xs text-muted-foreground">{r.names.join(", ")}</span>
               </TableCell>

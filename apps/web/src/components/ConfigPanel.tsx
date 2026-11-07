@@ -122,7 +122,8 @@ export default function ConfigPanel({
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            A vessel whose AIS name or call sign contains one of these is approved and never alerts.
+            A vessel whose AIS name or call sign has one of these as a word is approved and never
+            alerts.
           </p>
           <Table>
             <TableHeader>

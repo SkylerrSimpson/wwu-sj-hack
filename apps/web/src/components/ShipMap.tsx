@@ -33,6 +33,7 @@ export default function ShipMap({
   coverage = [],
   selectedId = null,
   onSelect,
+  className = "h-[60vh] w-full rounded border border-neutral-300",
 }: {
   ring: number[][];
   ships: Ship[];
@@ -40,6 +41,7 @@ export default function ShipMap({
   coverage?: Coverage[];
   selectedId?: string | null;
   onSelect?: (id: string) => void;
+  className?: string;
 }) {
   const div = useRef<HTMLDivElement>(null);
   const map = useRef<L.Map | null>(null);
@@ -54,7 +56,9 @@ export default function ShipMap({
 
   useEffect(() => {
     if (!div.current) return;
-    const m = L.map(div.current, { preferCanvas: true });
+    // Zoom sits bottom right, away from the top bar and the side column.
+    const m = L.map(div.current, { preferCanvas: true, zoomControl: false });
+    L.control.zoom({ position: "bottomright" }).addTo(m);
     L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution:
         '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
@@ -93,7 +97,7 @@ export default function ShipMap({
       // A text tag, not a dot, so a radar site is never mistaken for a boat.
       const tag = L.divIcon({
         className: "",
-        html: `<span class="inline-block -translate-x-1/2 -translate-y-1/2 rounded bg-purple-800 px-1 text-[10px] leading-4 whitespace-nowrap text-white">Radar: ${c.name}</span>`,
+        html: `<span class="inline-block -translate-x-1/2 -translate-y-1/2 rounded bg-purple-800 px-1 text-[10px] leading-4 whitespace-nowrap text-white">Proposed radar: ${c.name}</span>`,
         iconSize: [0, 0],
       });
       L.marker([c.lat, c.lon], { icon: tag, keyboard: false, interactive: false }).addTo(layer);
@@ -161,7 +165,7 @@ export default function ShipMap({
       ref={div}
       role="img"
       aria-label={`Map of Lummi waters showing ${ships.length} vessels`}
-      className="h-[60vh] w-full rounded border border-neutral-300"
+      className={className}
     />
   );
 }

@@ -21,16 +21,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col">
-        <p role="status" className="bg-amber-100 px-4 py-2 text-sm text-amber-900">
-          Approved list invented for this demo; no vessel shown is suspected of anything.
-        </p>
-        {children}
-        <p className="mx-auto w-full max-w-5xl px-4 pb-4 text-sm text-neutral-600">
-          Approximate boundary, not a legal boundary. Most fishing and recreational boats under 65
-          ft don&apos;t carry AIS; no alert does not mean no unapproved boat was there.
-        </p>
-      </body>
+      <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );
 }

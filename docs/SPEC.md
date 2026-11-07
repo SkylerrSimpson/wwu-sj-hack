@@ -24,7 +24,6 @@ Ninety seconds, pre-recorded.
 
 ## Out of scope
 
-- A live AIS feed: it needs a long-running server; the replay runs the same rules on recorded data.
 - Editing the priority list in the app: it needs a database; it's a file the Nation would edit.
 - Accounts and a database: sign-in is a demo gate with one shared password; the Nation's own sign-on comes later. Text messages: email only.
 - Google Maps: it needs a billing account and a key; Leaflet with OpenStreetMap gives the same top-down view.
@@ -33,12 +32,13 @@ Ninety seconds, pre-recorded.
 
 ## Data
 
-| Source                                                                                                      | What it is                                                                                                                                | Why                                                                                                                                                                     |
-| ----------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| The event's AIS file (`data/lummifiles/AIS_…csv`, committed reduced as `data/raw/ais-2024-12-05-to-09.zip`) | Five days, Dec 5 to 9 2024 UTC, 219,863 positions, 224 vessels, NOAA MarineCadastre format, public domain                                 | The vessel positions; recorded, so the demo can't fail                                                                                                                  |
-| The event's boundary (`data/raw/lummi-reservation-boundary.kml`)                                            | One ring, 132 points, about 24,068 acres                                                                                                  | Lummi waters. On all 219,863 positions it agrees with the Census Bureau's reservation polygon.                                                                          |
-| The approved patterns and list                                                                              | `XWL`, `WSF`, `SWN`, `NKK` in an AIS name or call sign (the PM's rule), plus an explicit list: the Lummi Island ferry and the patrol boat | Known vessels that never alert; the Nation would own the real list                                                                                                      |
-| One synthetic vessel                                                                                        | Ours, labeled                                                                                                                             | Real data has no non-priority vessel entering; this one crosses in twice, so the demo shows a suspicious alert and then a watch-list alert without accusing a real boat |
+| Source                                                                                                      | What it is                                                                                                                                      | Why                                                                                                                                                                     |
+| ----------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The event's AIS file (`data/lummifiles/AIS_…csv`, committed reduced as `data/raw/ais-2024-12-05-to-09.zip`) | Five days, Dec 5 to 9 2024 UTC, 219,863 positions, 224 vessels, NOAA MarineCadastre format, public domain                                       | The vessel positions; recorded, so the demo can't fail                                                                                                                  |
+| The event's boundary (`data/raw/lummi-reservation-boundary.kml`)                                            | One ring, 132 points, about 24,068 acres                                                                                                        | Lummi waters. On all 219,863 positions it agrees with the Census Bureau's reservation polygon.                                                                          |
+| The approved patterns and list                                                                              | `XWL`, `WSF`, `SWN`, `NKK` in an AIS name or call sign (the PM's rule), plus an explicit list: the Lummi Island ferry and the patrol boat       | Known vessels that never alert; the Nation would own the real list                                                                                                      |
+| Live AIS (`apps/streamer`)                                                                                  | A Python service holding one AISStream connection, serving `/v1/vessels` and a Server-Sent Events stream; private boats anonymised the same way | The Live mode; the recorded replay stays the demo path, because the feed has no uptime guarantee                                                                        |
+| One synthetic vessel                                                                                        | Ours, labeled                                                                                                                                   | Real data has no non-priority vessel entering; this one crosses in twice, so the demo shows a suspicious alert and then a watch-list alert without accusing a real boat |
 
 The contract is `data/schema.json`. `data.json` holds:
 
@@ -65,6 +65,7 @@ Modules (unchanged from the MVP):
 - `components/ShipMap.tsx`: client; `{ ring, ships, paths, selectedId, onSelect, className }`; Leaflet on a canvas renderer; dots moved in place; a popup on click.
 - `components/TopBar.tsx` and `components/SidePanel.tsx`: props in, markup out, no state of their own except which tab is open.
 - `lib/vessel.ts`, `lib/config.ts`, `lib/live.ts`, `lib/data.ts`, `app/actions.ts`: as before.
+- `lib/radar.ts`: four proposed shore radar sites and a range, drawn as dashed circles when the Radar switch is on; labelled "Proposed radar" on the map, because they are hypothetical.
 
 ## Look
 
@@ -86,7 +87,7 @@ A modern web application a government office could run, built from shadcn (`base
 ## Glossary
 
 - **Lummi waters**: the boundary polygon.
-- **Approved vessel** (`priority` in the code): a vessel allowed in Lummi waters, which never alerts: its AIS name or call sign matches a pattern the user configures (`XWL`, `WSF`, `SWN` and `NKK` to start), or it is on the explicit list in the data, or the user approved its id. A vessel on neither list is unlisted.
+- **Approved vessel** (`priority` in the code): a vessel allowed in Lummi waters, which never alerts: its AIS name or call sign matches a pattern the user configures (seventeen to start: the tribal codes the Nation's representative listed, `XWL` Lummi Nation, `SWN` Swinomish, `NKK` Nooksack, `TUL` Tulalip and the rest, plus `WSF` for the state ferries), or it is on the explicit list in the data, or the user approved its id. A vessel on neither list is unlisted.
 - **Watch list**: vessels the user has asked to be alerted about. The tool never calls a vessel an offender; that is the user's call.
 - **Suspicious**: an unlisted vessel that has entered Lummi waters.
 - **Entry**: a non-priority vessel's first position inside Lummi waters after one outside; each entry produces one alert.

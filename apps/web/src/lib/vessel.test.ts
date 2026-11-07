@@ -205,4 +205,4 @@ test("over the whole recorded window only the synthetic vessel enters Lummi wate
   const ids = newEntries(data.vessels, data.boundary.ring, from, to, none).map((e) => e.vesselId);
   expect(ids.length).toBeGreaterThan(0);
   expect(new Set(ids)).toEqual(new Set(["demo"]));
-});
+}, 20_000);

@@ -28,6 +28,7 @@ TYPE_WORDS = {
 }
 DECADE_WORDS = {6: "Passenger", 7: "Cargo", 8: "Tanker"}
 PRIVATE = {"Fishing", "Sailing", "Pleasure craft"}
+TYPES = {*TYPE_WORDS.values(), *DECADE_WORDS.values(), "Other", "Unknown"}
 
 
 @dataclass(frozen=True, slots=True)

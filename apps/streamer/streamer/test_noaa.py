@@ -1,11 +1,17 @@
+from collections.abc import Iterator
+from contextlib import contextmanager
+from datetime import date
+from functools import partial
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from threading import Thread
 
 import zstandard
 
-from streamer.archive import Reader
+from streamer.archive import Archive, Reader
 from streamer.config import Box
 from streamer.fleet import Position, Static
-from streamer.noaa import import_file, parse_row
+from streamer.noaa import already_imported, days_between, import_file, parse_row
 
 HEADER = (
     "mmsi,base_date_time,longitude,latitude,sog,cog,heading,vessel_name,imo,call_sign,"
@@ -114,3 +120,54 @@ def test_a_private_boat_stays_hidden_after_import(tmp_path: Path) -> None:
     [record] = Reader(db, b"s").frame(T + 60, 600)
     assert record["mmsi"] is None
     assert "ESCARGOT" not in str(record)
+
+
+class QuietHandler(SimpleHTTPRequestHandler):
+    def log_message(self, format: str, *args: object) -> None:
+        pass
+
+
+@contextmanager
+def serving(folder: Path) -> Iterator[str]:
+    server = ThreadingHTTPServer(("127.0.0.1", 0), partial(QuietHandler, directory=str(folder)))
+    Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        yield f"http://127.0.0.1:{server.server_address[1]}"
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_a_day_streams_from_a_url_without_keeping_the_national_file(tmp_path: Path) -> None:
+    write_file(tmp_path, SHIP, FAR)
+    db = tmp_path / "ais.db"
+    with serving(tmp_path) as base:
+        counts = import_file(f"{base}/ais-2025-11-10.csv.zst", db, BOX)
+    assert (counts["stored"], counts["outside"]) == (1, 1)
+
+
+def test_a_bad_line_in_a_national_file_is_counted_not_fatal(tmp_path: Path) -> None:
+    write_file(tmp_path, "garbage\n", SHIP)
+    counts = import_file(tmp_path / "ais-2025-11-10.csv.zst", tmp_path / "ais.db", BOX)
+    assert (counts["stored"], counts["rejected"]) == (1, 1)
+
+
+def test_days_run_newest_first_so_stopping_early_leaves_no_hole_at_the_seam() -> None:
+    assert days_between(date(2026, 6, 30), date(2026, 6, 28)) == [
+        date(2026, 6, 30),
+        date(2026, 6, 29),
+        date(2026, 6, 28),
+    ]
+
+
+def test_a_day_counts_as_imported_only_once_its_coverage_spans_the_day(tmp_path: Path) -> None:
+    db = tmp_path / "ais.db"
+    archive = Archive(db)
+    day = date(2025, 11, 10)
+    assert not already_imported(db, day)
+    archive.cover("noaa", T, T + 3600 * 5)
+    assert not already_imported(db, day)
+    archive.cover("noaa", T, T + 86_399)
+    archive.close()
+    assert already_imported(db, day)
+    assert not already_imported(db, date(2025, 11, 11))

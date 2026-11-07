@@ -6,6 +6,7 @@ from typing import Any
 import pytest
 
 from streamer.archive import Archive, Entry, Reader, Recorder, gaps
+from streamer.config import Box
 from streamer.fleet import Fleet, Position, Static, iso
 
 T0 = 1_793_990_000.0
@@ -67,6 +68,8 @@ def test_writing_the_same_report_twice_stores_and_counts_it_once(path: Path) -> 
     db = sqlite3.connect(path)
     assert db.execute("SELECT COUNT(*) FROM reports").fetchone() == (1,)
     assert db.execute("SELECT SUM(reports) FROM hourly").fetchone() == (1,)
+    assert db.execute("SELECT SUM(reports) FROM daily_cells").fetchone() == (1,)
+    assert db.execute("SELECT lat_cell, lon_cell FROM daily_cells").fetchone() == (4872, -12268)
 
 
 def test_two_sources_can_hold_the_same_moment(path: Path) -> None:
@@ -382,3 +385,97 @@ def test_recorder_writes_what_is_pending_when_stopped(path: Path) -> None:
     recorder.add(BASE, T0, (), "live")
     recorder.stop()
     assert len(Reader(path, SALT).frame(T0, 30)) == 1
+
+
+def test_reports_are_in_time_order_and_filter_by_area_and_type(path: Path) -> None:
+    reader = store(
+        path,
+        identity(),
+        identity(BOAT, 37),
+        position(T0 + 20, lat=48.72),
+        position(T0 + 10, lat=48.10),
+        position(T0 + 5, mmsi=BOAT),
+    )
+    every = reader.reports(T0, T0 + 100, 100)
+    assert every is not None
+    assert [r["heard_at"] for r in every["reports"]] == sorted(
+        r["heard_at"] for r in every["reports"]
+    )
+    assert len(every["reports"]) == 3
+    boxed = reader.reports(T0, T0 + 100, 100, box=Box(48.5, -123, 49, -122))
+    assert boxed is not None
+    assert len(boxed["reports"]) == 2
+    passenger = reader.reports(T0, T0 + 100, 100, types={"Passenger"})
+    assert passenger is not None
+    assert {r["type"] for r in passenger["reports"]} == {"Passenger"}
+
+
+def test_reports_say_when_the_limit_cut_them_short(path: Path) -> None:
+    reader = store(path, *(position(T0 + n) for n in range(5)))
+    cut = reader.reports(T0, T0 + 100, 3)
+    whole = reader.reports(T0, T0 + 100, 5)
+    assert cut is not None and whole is not None
+    assert (len(cut["reports"]), cut["truncated"]) == (3, True)
+    assert (len(whole["reports"]), whole["truncated"]) == (5, False)
+
+
+def test_reports_stay_private(path: Path) -> None:
+    reader = store(path, identity(BOAT, 37, name="MY BOAT"), position(mmsi=BOAT))
+    found = reader.reports(T0 - 1, T0 + 1, 10)
+    assert found is not None
+    assert "MY BOAT" not in str(found)
+    assert str(BOAT) not in str(found)
+    assert reader.reports(T0 - 1, T0 + 1, 10, mmsi=BOAT) is None
+
+
+def test_reports_for_one_identified_vessel(path: Path) -> None:
+    reader = store(path, identity(), position(), position(T0, mmsi=BOAT))
+    found = reader.reports(T0 - 1, T0 + 1, 10, mmsi=SHIP)
+    assert found is not None
+    assert [r["mmsi"] for r in found["reports"]] == [SHIP]
+
+
+def test_catalog_names_identified_vessels_and_only_counts_private_ones(path: Path) -> None:
+    reader = store(
+        path,
+        identity(),
+        identity(BOAT, 37, name="MY BOAT"),
+        position(T0),
+        position(T0 + 3600),
+        position(T0, mmsi=BOAT),
+        position(T0, mmsi=999),
+    )
+    found = reader.catalog(T0 - 1, T0 + 7200)
+    [ship] = found["vessels"]
+    assert (ship["mmsi"], ship["name"], ship["hours_heard"], ship["reports"]) == (
+        SHIP,
+        "TEST SHIP",
+        2,
+        2,
+    )
+    assert found["private"] == [
+        {"type": "Pleasure craft", "vessels": 1, "reports": 1},
+        {"type": "Unknown", "vessels": 1, "reports": 1},
+    ]
+    assert "MY BOAT" not in str(found)
+    assert str(BOAT) not in str(found)
+    only = reader.catalog(T0 - 1, T0 + 7200, {"Cargo"})
+    assert only == {"vessels": [], "private": []}
+
+
+def test_density_counts_vessels_per_cell(path: Path) -> None:
+    reader = store(path, identity(), position(T0), position(T0 + 10))
+    [cell] = reader.density(T0 - 1, T0 + 100)
+    assert (cell["vessels"], cell["reports"]) == (1, 2)
+    assert (cell["lat"], cell["lon"]) == (48.72, -122.68)
+    assert reader.density(T0 - 1, T0 + 100, {"Cargo"}) == []
+
+
+def test_density_wont_point_at_a_lone_private_boats_dock(path: Path) -> None:
+    few = [identity(BOAT + n, 37) for n in range(2)] + [
+        position(T0, mmsi=BOAT + n) for n in range(2)
+    ]
+    assert store(path, *few).density(T0 - 1, T0 + 100) == []
+    enough = [identity(BOAT + 2, 37), position(T0, mmsi=BOAT + 2)]
+    [cell] = store(path, *enough).density(T0 - 1, T0 + 100)
+    assert cell["vessels"] == 3

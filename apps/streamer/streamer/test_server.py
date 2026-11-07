@@ -286,7 +286,15 @@ def with_archive(tmp_path: Path, scenario: Scenario) -> None:
 
 def test_history_without_an_archive_says_so() -> None:
     async def scenario(client: Any, _service: Service) -> None:
-        for path in ["/v1/history", "/v1/track?mmsi=1", "/v1/activity", "/v1/coverage"]:
+        for path in [
+            "/v1/history",
+            "/v1/track?mmsi=1",
+            "/v1/reports",
+            "/v1/catalog",
+            "/v1/density",
+            "/v1/activity",
+            "/v1/coverage",
+        ]:
             assert (await client.get(path)).status == 503, path
 
     with_client(scenario)
@@ -398,10 +406,50 @@ def test_history_inputs_are_validated(tmp_path: Path) -> None:
             ("/v1/track", {"mmsi": "1", "max_points": "0", **good}),
             ("/v1/track", {"mmsi": "1", "max_points": "999999", **good}),
             ("/v1/track", {"mmsi": "1", "from": "2020-01-01T00:00:00Z", "to": good["to"]}),
+            ("/v1/reports", {"from": "2020-01-01T00:00:00Z", "to": good["to"]}),
+            ("/v1/reports", {"limit": "0", **good}),
+            ("/v1/reports", {"limit": "999999", **good}),
+            ("/v1/reports", {"box": "1,2,3", **good}),
+            ("/v1/reports", {"type": "Spaceship", **good}),
+            ("/v1/reports", {"mmsi": "abc", **good}),
+            ("/v1/catalog", {"type": "Spaceship", **good}),
+            ("/v1/density", {"type": "Spaceship", **good}),
             ("/v1/activity", {"bin_s": "60", **good}),
             ("/v1/activity", {"from": good["to"], "to": good["from"]}),
             ("/v1/coverage", {"from": "nope"}),
         ]:
             assert (await client.get(path, params=params)).status == 400, (path, params)
+
+    with_archive(tmp_path, scenario)
+
+
+def test_reports_catalog_and_density_endpoints(tmp_path: Path) -> None:
+    async def scenario(client: Any, service: Service) -> None:
+        now = time.time()
+        service.ingest(identified(heard_at=now - 10), now - 10)
+        service.ingest(position(heard_at=now - 10), now - 10)
+        service.ingest(position(mmsi=338000002, heard_at=now - 10), now - 10)
+        assert service.recorder is not None
+        service.recorder.flush()
+        window = {"from": iso(now - 3600), "to": iso(now + 60)}
+
+        found = await client.get(
+            "/v1/reports",
+            params={"box": "48,-123,49,-122", "type": "Passenger,Unknown", "limit": "10", **window},
+        )
+        assert found.status == 200
+        body = await found.json()
+        assert len(body["reports"]) == 2
+        assert body["truncated"] is False
+        hidden = await client.get("/v1/reports", params={"mmsi": "338000002", **window})
+        assert hidden.status == 404
+
+        catalog = await (await client.get("/v1/catalog", params=window)).json()
+        assert [v["mmsi"] for v in catalog["vessels"]] == [368000001]
+        assert catalog["private"] == [{"type": "Unknown", "vessels": 1, "reports": 1}]
+
+        density = await (await client.get("/v1/density", params=window)).json()
+        assert density["cell_deg"] == 0.01
+        assert [c["vessels"] for c in density["cells"]] == [1]
 
     with_archive(tmp_path, scenario)

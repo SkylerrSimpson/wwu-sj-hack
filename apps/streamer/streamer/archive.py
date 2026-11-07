@@ -5,12 +5,14 @@ import sqlite3
 import threading
 import time
 from collections import Counter, deque
-from collections.abc import Iterable, Sequence
+from collections.abc import Collection, Iterable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from math import floor
 from pathlib import Path
 from typing import Any, Literal, cast
 
+from streamer.config import Box
 from streamer.fleet import (
     Position,
     Report,
@@ -30,6 +32,8 @@ COVERAGE_GAP_S = 300.0
 # How far past a segment's end still counts as covered: writes arrive in batches.
 COVERED_SLACK_S = 60.0
 BATCH = 5000
+# About 1.1 km north-south and 0.7 km east-west here: fine enough to pick out a channel or a dock.
+CELLS_PER_DEGREE = 100
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS reports (
@@ -67,6 +71,15 @@ CREATE TABLE IF NOT EXISTS hourly (
     reports INTEGER NOT NULL,
     PRIMARY KEY (hour, source, mmsi)
 ) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS daily_cells (
+    day INTEGER NOT NULL,
+    source TEXT NOT NULL,
+    lat_cell INTEGER NOT NULL,
+    lon_cell INTEGER NOT NULL,
+    mmsi INTEGER NOT NULL,
+    reports INTEGER NOT NULL,
+    PRIMARY KEY (day, source, lat_cell, lon_cell, mmsi)
+) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS coverage (
     source TEXT NOT NULL,
     started_at REAL NOT NULL,
@@ -90,6 +103,22 @@ LEFT JOIN identities i ON i.mmsi = r.mmsi
     AND i.heard_at = (SELECT MAX(heard_at) FROM identities WHERE mmsi = r.mmsi)
 ORDER BY r.heard_at DESC
 """
+
+
+REPORTS_SQL = """
+SELECT r.*, i.heard_at AS identity_at, i.name, i.callsign, i.type_code, i.length_m
+FROM reports r {index}
+LEFT JOIN identities i ON i.mmsi = r.mmsi
+    AND i.heard_at = (SELECT MAX(heard_at) FROM identities WHERE mmsi = r.mmsi)
+WHERE r.heard_at BETWEEN ? AND ? {vessel}
+ORDER BY r.heard_at
+"""
+LATEST_IDENTITIES_SQL = """
+SELECT mmsi, MAX(heard_at) AS identity_at, name, callsign, type_code, length_m
+FROM identities GROUP BY mmsi
+"""
+# Below this, a density cell could point at one private boat's home dock.
+MIN_PRIVATE_IN_CELL = 3
 
 
 @dataclass(frozen=True, slots=True)
@@ -155,6 +184,7 @@ class Archive:
         """
         stored = 0
         hours: Counter[tuple[int, str, int]] = Counter()
+        cells: Counter[tuple[int, str, int, int, int]] = Counter()
         spans: dict[str, tuple[float, float]] = {}
         # Applied after the commit, so a failed write leaves memory matching the file.
         changed: dict[int, Static] = {}
@@ -177,10 +207,24 @@ class Archive:
                 if self._insert_position(report, entry):
                     stored += 1
                     hours[(int(report.heard_at // 3600), entry.source, report.mmsi)] += 1
+                    cells[
+                        (
+                            int(report.heard_at // 86_400),
+                            entry.source,
+                            floor(report.lat * CELLS_PER_DEGREE),
+                            floor(report.lon * CELLS_PER_DEGREE),
+                            report.mmsi,
+                        )
+                    ] += 1
             self._db.executemany(
                 "INSERT INTO hourly VALUES (?, ?, ?, ?) ON CONFLICT DO UPDATE "
                 "SET reports = reports + excluded.reports",
                 [(*key, count) for key, count in hours.items()],
+            )
+            self._db.executemany(
+                "INSERT INTO daily_cells VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT DO UPDATE "
+                "SET reports = reports + excluded.reports",
+                [(*key, count) for key, count in cells.items()],
             )
             for source, (low, high) in spans.items():
                 self._merge_coverage(source, low, high)
@@ -496,6 +540,123 @@ class Reader:
             }
             for row in rows
         ]
+
+    def reports(
+        self,
+        start: float,
+        end: float,
+        limit: int,
+        box: Box | None = None,
+        types: Collection[str] | None = None,
+        mmsi: int | None = None,
+    ) -> dict[str, Any] | None:
+        """Every report in time order. None when mmsi names a private or unidentified vessel."""
+        if mmsi is not None and not self._identified(mmsi):
+            return None
+        index = "" if mmsi is not None else "INDEXED BY reports_by_time"
+        vessel = "" if mmsi is None else "AND r.mmsi = ?"
+        args = (start, end) if mmsi is None else (start, end, mmsi)
+        records: list[VesselRecord] = []
+        truncated = False
+        db = self.connect()
+        try:
+            for row in db.execute(REPORTS_SQL.format(index=index, vessel=vessel), args):
+                if box is not None and not box.contains(row["lat"], row["lon"]):
+                    continue
+                if types is not None and type_word(row["type_code"]) not in types:
+                    continue
+                if len(records) == limit:
+                    truncated = True
+                    break
+                records.append(self._record(row))
+        finally:
+            db.close()
+        return {"reports": records, "truncated": truncated}
+
+    def catalog(
+        self, start: float, end: float, types: Collection[str] | None = None
+    ) -> dict[str, Any]:
+        """Who was heard: named for an identified vessel, only counted for a private one."""
+        rows = self._all(
+            "SELECT h.mmsi, SUM(h.reports) AS reports, COUNT(DISTINCT h.hour) AS hours, "
+            "MIN(h.hour) AS first_hour, MAX(h.hour) AS last_hour, "
+            "i.name, i.callsign, i.type_code, i.length_m FROM hourly h "
+            f"LEFT JOIN ({LATEST_IDENTITIES_SQL}) i ON i.mmsi = h.mmsi "
+            "WHERE h.hour BETWEEN ? AND ? GROUP BY h.mmsi",
+            int(start // 3600),
+            int(end // 3600),
+        )
+        named = []
+        hidden: dict[str, Counter[str]] = {}
+        for row in rows:
+            kind = type_word(row["type_code"])
+            if types is not None and kind not in types:
+                continue
+            if is_identified(row["type_code"]):
+                named.append(
+                    {
+                        "id": vessel_id(self._salt, str(row["mmsi"])),
+                        "mmsi": row["mmsi"],
+                        "name": row["name"],
+                        "callsign": row["callsign"],
+                        "type": kind,
+                        "length_m": row["length_m"],
+                        "hours_heard": row["hours"],
+                        "reports": row["reports"],
+                        "first_heard": iso(row["first_hour"] * 3600),
+                        "last_heard": iso(row["last_hour"] * 3600),
+                    }
+                )
+            else:
+                counts = hidden.setdefault(kind, Counter())
+                counts["vessels"] += 1
+                counts["reports"] += row["reports"]
+        named.sort(key=lambda v: (-v["hours_heard"], str(v["name"])))
+        return {
+            "vessels": named,
+            "private": [{"type": kind, **counts} for kind, counts in sorted(hidden.items())],
+        }
+
+    def density(
+        self, start: float, end: float, types: Collection[str] | None = None
+    ) -> list[dict[str, Any]]:
+        """Vessels and reports per grid cell, from the rollup so a long range stays fast."""
+        rows = self._all(
+            "SELECT d.lat_cell, d.lon_cell, i.type_code, COUNT(DISTINCT d.mmsi) AS vessels, "
+            "SUM(d.reports) AS reports FROM daily_cells d "
+            f"LEFT JOIN ({LATEST_IDENTITIES_SQL}) i ON i.mmsi = d.mmsi "
+            "WHERE d.day BETWEEN ? AND ? GROUP BY d.lat_cell, d.lon_cell, i.type_code",
+            int(start // 86_400),
+            int(end // 86_400),
+        )
+        shown: dict[tuple[int, int], Counter[str]] = {}
+        private: dict[tuple[int, int], Counter[str]] = {}
+        for row in rows:
+            kind = type_word(row["type_code"])
+            if types is not None and kind not in types:
+                continue
+            group = shown if is_identified(row["type_code"]) else private
+            cell = group.setdefault((row["lat_cell"], row["lon_cell"]), Counter())
+            cell["vessels"] += row["vessels"]
+            cell["reports"] += row["reports"]
+        for key, counts in private.items():
+            if counts["vessels"] >= MIN_PRIVATE_IN_CELL:
+                shown.setdefault(key, Counter()).update(counts)
+        return [
+            {
+                "lat": lat_cell / CELLS_PER_DEGREE,
+                "lon": lon_cell / CELLS_PER_DEGREE,
+                "vessels": counts["vessels"],
+                "reports": counts["reports"],
+            }
+            for (lat_cell, lon_cell), counts in sorted(shown.items())
+        ]
+
+    def _identified(self, mmsi: int) -> bool:
+        rows = self._all(
+            "SELECT type_code FROM identities WHERE mmsi = ? ORDER BY heard_at DESC LIMIT 1", mmsi
+        )
+        return bool(rows) and is_identified(rows[0]["type_code"])
 
     def coverage(self, start: float, end: float) -> dict[str, Any]:
         rows = self._all(

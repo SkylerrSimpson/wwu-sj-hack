@@ -17,8 +17,8 @@ from aiohttp import web
 
 from streamer import aisstream
 from streamer.archive import Reader, Recorder
-from streamer.config import Config
-from streamer.fleet import Fleet, Position, Report, iso
+from streamer.config import Box, Config, parse_box
+from streamer.fleet import TYPES, Fleet, Position, Report, iso
 from streamer.health import Health
 
 log = logging.getLogger(__name__)
@@ -35,6 +35,8 @@ COVERAGE = (
 MAX_WINDOW_S = 24 * 3600.0
 MAX_TRACK_S = 31 * 24 * 3600.0
 MAX_TRACK_POINTS = 10_000
+MAX_REPORTS_S = 7 * 24 * 3600.0
+MAX_REPORTS = 50_000
 # Keeps slow history queries from taking every thread while the live stream carries on.
 MAX_HISTORY_QUERIES = 4
 
@@ -60,6 +62,36 @@ def time_range(request: web.Request, default_s: float) -> tuple[float, float]:
     if start >= end:
         raise web.HTTPBadRequest(text="from must be before to")
     return start, end
+
+
+def types_param(request: web.Request) -> set[str] | None:
+    text = request.query.get("type")
+    if text is None:
+        return None
+    types = set(text.split(","))
+    if not types <= TYPES:
+        raise web.HTTPBadRequest(text=f"type must be from: {', '.join(sorted(TYPES))}")
+    return types
+
+
+def box_param(request: web.Request) -> Box | None:
+    text = request.query.get("box")
+    if text is None:
+        return None
+    try:
+        return parse_box(text)
+    except ValueError:
+        raise web.HTTPBadRequest(text="box must be south,west,north,east in degrees") from None
+
+
+def mmsi_param(request: web.Request) -> int | None:
+    text = request.query.get("mmsi")
+    if text is None:
+        return None
+    try:
+        return int(text)
+    except ValueError:
+        raise web.HTTPBadRequest(text="mmsi must be a number") from None
 
 
 def number_param(request: web.Request, name: str, default: float, high: float) -> float:
@@ -226,10 +258,9 @@ def build(
 
     async def track(request: web.Request) -> web.Response:
         store = archive()
-        try:
-            mmsi = int(request.query.get("mmsi", ""))
-        except ValueError:
-            raise web.HTTPBadRequest(text="mmsi must be a number") from None
+        mmsi = mmsi_param(request)
+        if mmsi is None:
+            raise web.HTTPBadRequest(text="mmsi is required")
         start, end = time_range(request, 24 * 3600.0)
         if end - start > MAX_TRACK_S:
             raise web.HTTPBadRequest(text="a track can cover at most 31 days")
@@ -238,6 +269,37 @@ def build(
         if found is None:
             raise web.HTTPNotFound(text="no track for this vessel")
         return compressed(found)
+
+    async def reports(request: web.Request) -> web.Response:
+        store = archive()
+        start, end = time_range(request, 3600.0)
+        if end - start > MAX_REPORTS_S:
+            raise web.HTTPBadRequest(text="reports can cover at most 7 days at a time")
+        limit = int(number_param(request, "limit", 5000, MAX_REPORTS))
+        found = await query(
+            store.reports,
+            start,
+            end,
+            max(limit, 1),
+            box_param(request),
+            types_param(request),
+            mmsi_param(request),
+        )
+        if found is None:
+            raise web.HTTPNotFound(text="no reports can be given for this vessel")
+        return compressed({"from": iso(start), "to": iso(end), **found})
+
+    async def catalog(request: web.Request) -> web.Response:
+        store = archive()
+        start, end = time_range(request, 7 * 24 * 3600.0)
+        found = await query(store.catalog, start, end, types_param(request))
+        return compressed({"from": iso(start), "to": iso(end), **found})
+
+    async def density(request: web.Request) -> web.Response:
+        store = archive()
+        start, end = time_range(request, 30 * 24 * 3600.0)
+        cells = await query(store.density, start, end, types_param(request))
+        return compressed({"from": iso(start), "to": iso(end), "cell_deg": 0.01, "cells": cells})
 
     async def activity(request: web.Request) -> web.Response:
         store = archive()
@@ -376,6 +438,9 @@ def build(
     app.router.add_get("/v1/stream", stream)
     app.router.add_get("/v1/history", history)
     app.router.add_get("/v1/track", track)
+    app.router.add_get("/v1/reports", reports)
+    app.router.add_get("/v1/catalog", catalog)
+    app.router.add_get("/v1/density", density)
     app.router.add_get("/v1/activity", activity)
     app.router.add_get("/v1/coverage", coverage)
     app.router.add_get("/healthz", health)

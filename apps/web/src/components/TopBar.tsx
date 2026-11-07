@@ -10,6 +10,9 @@ import { useTheme } from "@/components/useTheme";
 import type { Day } from "@/lib/history";
 
 export type Mode = "replay" | "live" | "history";
+// The recorded December replay has no button: Live and History cover the demo, and the
+// replay code stays only as the fallback a developer can switch to.
+const MODES: Mode[] = ["live", "history"];
 const MODE_LABEL: Record<Mode, string> = {
   replay: "Recorded days",
   live: "Live",
@@ -133,7 +136,7 @@ export default function TopBar(p: TopBarProps) {
         {/* Below xl, the playback controls drop to their own row under the logo and switches. */}
         <div className="order-last flex min-w-0 flex-1 basis-full flex-wrap items-center gap-2 xl:order-none xl:basis-0">
           <div role="group" aria-label="Mode" className="flex gap-1">
-            {(Object.keys(MODE_LABEL) as Mode[]).map((m) => (
+            {MODES.map((m) => (
               <Button
                 key={m}
                 size="sm"

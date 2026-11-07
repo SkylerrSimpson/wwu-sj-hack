@@ -184,7 +184,7 @@ function ReplayView({ data }: { data: Data }) {
   const [panelWidth, setPanelWidth] = useState(PANEL_DEFAULT);
   const [filter, setFilter] = useFilter();
   const [entries, setEntries] = useState<Entry[]>([]);
-  const [mode, setMode] = useState<Mode>("replay");
+  const [mode, setMode] = useState<Mode>("live");
   const [live, setLive] = useState<Map<string, Vessel>>(new Map());
   // Each live vessel's latest heading; the replay works its direction out from the track.
   const [headings, setHeadings] = useState<Map<string, number | null>>(new Map());
@@ -644,7 +644,7 @@ function ReplayView({ data }: { data: Data }) {
         end={end}
         onSeek={setT}
         onSkip={
-          demoStart === undefined || mode === "history" ? undefined : () => setT(demoStart - 300)
+          demoStart === undefined || mode !== "replay" ? undefined : () => setT(demoStart - 300)
         }
         clockText={clock.format(at * 1000)}
         clockShort={clockShort.format(at * 1000)}

@@ -1,6 +1,6 @@
 "use client";
 
-import { Eye, EyeOff, Menu, Moon, Pause, Play, Sun } from "lucide-react";
+import { Eye, EyeOff, Moon, Pause, Play, Settings, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -93,7 +93,7 @@ export default function TopBar(p: TopBarProps) {
               />
             }
           >
-            <Menu />
+            <Settings />
           </TooltipTrigger>
           <TooltipContent side="bottom">Filters and charts</TooltipContent>
         </Tooltip>

@@ -20,13 +20,8 @@ export type PlotsProps = {
 };
 
 const W = 288;
-const SLICE = [
-  "var(--chart-1)",
-  "var(--chart-2)",
-  "var(--chart-3)",
-  "var(--chart-4)",
-  "var(--chart-5)",
-];
+// Okabe-Ito colours, told apart with colour blindness too; in CATEGORIES order, gray for Other.
+const SLICE = ["#E69F00", "#56B4E9", "#0072B2", "#009E73", "#999999"];
 
 const short = new Intl.DateTimeFormat("en-US", {
   timeZone: "America/Los_Angeles",

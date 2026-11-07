@@ -8,6 +8,7 @@ import AlertPanel from "@/components/AlertPanel";
 import FilterPanel from "@/components/FilterPanel";
 import Plots from "@/components/Plots";
 import SidePanel from "@/components/SidePanel";
+import SignOutButton from "@/components/SignOutButton";
 import TopBar from "@/components/TopBar";
 import { useConfig } from "@/components/useConfig";
 import { useFilter } from "@/components/useFilter";
@@ -554,10 +555,11 @@ function ReplayView({ data }: { data: Data }) {
         onWidth={setPanelWidth}
         footer={footer}
       />
-      {/* Slides over the column, the same size, so the map keeps its room; invisible when closed keeps it out of the tab order. */}
+      {/* Slides over the column, a little wider so the pie legend fits on one line; invisible when closed keeps it out of the tab order. */}
       <aside
         aria-label="Filters and charts"
-        style={{ width: panelWidth }}
+        // At least 384 px so the pie legend stays on one line.
+        style={{ width: Math.max(panelWidth, 384) }}
         className={`absolute top-[76px] bottom-0 left-0 z-30 space-y-4 overflow-y-auto border-r bg-background p-3 shadow-xl transition-all duration-300 ease-out motion-reduce:transition-none ${menuOpen ? "" : "invisible -translate-x-full"}${overlay ? "" : " hidden"}`}
       >
         <div className="flex items-center justify-between">
@@ -582,9 +584,12 @@ function ReplayView({ data }: { data: Data }) {
           ring={data.boundary.ring}
           {...plots}
         />
-        <Link href="/settings" className="block text-sm underline">
-          Settings
-        </Link>
+        <div className="flex items-center gap-3 border-t pt-3">
+          <SignOutButton />
+          <Link href="/settings" className="text-sm underline">
+            All settings
+          </Link>
+        </div>
       </aside>
     </div>
   );

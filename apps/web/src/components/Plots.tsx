@@ -185,7 +185,7 @@ function Heatmap({ heat, box, ring }: { heat: Heat; box: Box; ring: number[][] }
       aria-label={`Grid of where the vessels were, busiest cell ${heat.max} positions`}
     >
       {/* shortcut: Mercator tiles stretched linearly, fine at this zoom; reproject if the box grows past a few degrees. */}
-      <g className="opacity-40 grayscale">
+      <g className="opacity-40 grayscale dark:opacity-60 dark:invert">
         {tilesFor(box, 11).map((tile) => (
           <image
             key={`${tile.x}/${tile.y}`}
@@ -206,7 +206,7 @@ function Heatmap({ heat, box, ring }: { heat: Heat; box: Box; ring: number[][] }
             y={Math.floor(i / heat.cols) * ch}
             width={cw}
             height={ch}
-            className="fill-blue-600"
+            className="fill-blue-600 dark:fill-sky-300"
             opacity={0.25 + 0.75 * shade(n)}
           />
         ) : null,

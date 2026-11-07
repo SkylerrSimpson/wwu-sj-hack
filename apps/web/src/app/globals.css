@@ -178,3 +178,9 @@
     }
   }
 }
+
+/* Selects are transparent, so Windows draws their open list white under the light text; give options the popover colours. */
+option {
+  background-color: var(--popover);
+  color: var(--popover-foreground);
+}

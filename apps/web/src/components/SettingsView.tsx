@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import ConfigPanel from "@/components/ConfigPanel";
+import SignOutButton from "@/components/SignOutButton";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -19,12 +20,16 @@ export default function SettingsView({ vessels }: { vessels: { id: string; name:
     <main className="mx-auto w-full max-w-3xl flex-1 space-y-4 p-4">
       <header className="flex items-start justify-between gap-4">
         <div className="space-y-1">
+          <p className="col-span-full -mx-4 -mt-4 mb-2 bg-amber-100 px-4 py-1 text-xs text-amber-900">
+            Approved list invented for this demo; no vessel shown is suspected of anything.
+          </p>
           <h1 className="text-2xl font-semibold">Settings</h1>
           <p className="text-sm text-muted-foreground">Everything here is saved in this browser.</p>
         </div>
         <Button variant="outline" render={<Link href="/map" />}>
           Back to map
         </Button>
+        <SignOutButton />
       </header>
 
       <Card size="sm">

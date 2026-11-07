@@ -14,7 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { Config } from "@/lib/config";
+import type { Config, PatternField } from "@/lib/config";
 
 type Named = { id: string; name: string };
 type ListKey = "priority" | "watch";
@@ -38,6 +38,7 @@ export default function ConfigPanel({
   const [text, setText] = useState("");
   const [label, setLabel] = useState("");
   const [patternError, setPatternError] = useState("");
+  const [field, setField] = useState<PatternField>("callsign");
   const [typedId, setTypedId] = useState("");
 
   const nameOf = (id: string) => vessels.find((v) => v.id === id)?.name;
@@ -54,7 +55,7 @@ export default function ConfigPanel({
     if (config.patterns.some((p) => p.text.toLowerCase() === t.toLowerCase()))
       return setPatternError(`"${t}" is already a pattern.`);
     const next = copy();
-    next.patterns.push({ text: t, label: label.trim() || t });
+    next.patterns.push({ text: t, label: label.trim() || t, field });
     onChange(next);
     setText("");
     setLabel("");
@@ -122,14 +123,16 @@ export default function ConfigPanel({
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            A vessel whose AIS name or call sign has one of these as a word is approved and never
-            alerts.
+            A vessel whose call sign or name has one of these as a whole word is approved and never
+            alerts. Tribal codes live in call signs; matching them against names would approve the
+            wrong boats.
           </p>
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Text</TableHead>
                 <TableHead>Label</TableHead>
+                <TableHead>Matches</TableHead>
                 <TableHead className="w-0" />
               </TableRow>
             </TableHeader>
@@ -138,6 +141,7 @@ export default function ConfigPanel({
                 <TableRow key={p.text}>
                   <TableCell className="font-mono">{p.text}</TableCell>
                   <TableCell>{p.label}</TableCell>
+                  <TableCell>{p.field === "callsign" ? "Call sign" : "Name"}</TableCell>
                   <TableCell className="text-right">
                     <Button variant="outline" size="sm" onClick={() => removePattern(p.text)}>
                       Remove
@@ -147,7 +151,7 @@ export default function ConfigPanel({
               ))}
             </TableBody>
           </Table>
-          <form onSubmit={addPattern} className="grid grid-cols-2 gap-2">
+          <form onSubmit={addPattern} className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             <div className="space-y-1">
               <Label htmlFor="pattern-text">Text to match</Label>
               <Input
@@ -168,10 +172,22 @@ export default function ConfigPanel({
                 placeholder="Lummi Nation"
               />
             </div>
+            <div className="space-y-1">
+              <Label htmlFor="pattern-field">Matches</Label>
+              <select
+                id="pattern-field"
+                className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm"
+                value={field}
+                onChange={(e) => setField(e.target.value === "name" ? "name" : "callsign")}
+              >
+                <option value="callsign">Call sign</option>
+                <option value="name">Name</option>
+              </select>
+            </div>
             <p id="pattern-error" role="alert" className="col-span-2 text-sm text-destructive">
               {patternError}
             </p>
-            <Button type="submit" size="sm" className="col-span-2 justify-self-start">
+            <Button type="submit" size="sm" className="col-span-2 justify-self-start sm:col-span-3">
               Add pattern
             </Button>
           </form>

@@ -1,24 +1,43 @@
 import type { Vessel } from "@/lib/data";
 import type { Lists } from "@/lib/vessel";
 
-export type Pattern = { text: string; label: string };
+export type PatternField = "callsign" | "name";
+export type Pattern = { text: string; label: string; field: PatternField };
 export type Config = { patterns: Pattern[]; priority: Set<string>; watch: Set<string> };
 
 export const DEFAULT_CONFIG: Config = {
+  // The tribal codes come from the Nation's representative and live in call signs; a code
+  // matched against names approves the wrong boats (a tug called SUN SPIRIT).
   patterns: [
-    { text: "XWL", label: "Lummi Nation" },
-    { text: "WSF", label: "Washington State Ferries" },
-    { text: "SWN", label: "Swinomish" },
-    { text: "NKK", label: "Nooksack" },
+    { text: "XWL", label: "Lummi Nation", field: "callsign" },
+    { text: "WSF", label: "Washington State Ferries", field: "name" },
+    { text: "HOH", label: "Hoh Tribe", field: "callsign" },
+    { text: "JST", label: "Jamestown S'Klallam Tribe", field: "callsign" },
+    { text: "KWA", label: "Quinault Nation", field: "callsign" },
+    { text: "KWL", label: "Quileute Nation", field: "callsign" },
+    { text: "LEK", label: "Lower Elwha Klallam Tribe", field: "callsign" },
+    { text: "MKH", label: "Makah Tribe", field: "callsign" },
+    { text: "NKK", label: "Nooksack Tribe", field: "callsign" },
+    { text: "PGK", label: "Port Gamble S'Klallam Tribe", field: "callsign" },
+    { text: "SKK", label: "Skokomish Tribe", field: "callsign" },
+    { text: "SST", label: "Sauk-Suiattle Tribe", field: "callsign" },
+    { text: "STL", label: "Stillaguamish Tribe", field: "callsign" },
+    { text: "SUN", label: "Suquamish Tribe", field: "callsign" },
+    { text: "SWN", label: "Swinomish Tribe", field: "callsign" },
+    { text: "SXN", label: "Squaxin Island Tribe", field: "callsign" },
+    { text: "TUL", label: "Tulalip Tribe", field: "callsign" },
   ],
   priority: new Set(),
   watch: new Set(),
 };
 
-// Whole words, not substrings: the pattern CG must not approve CMA CGM.
+const wordsOf = (s: string) => new Set(s.toLowerCase().split(/[\s/-]+/));
+
+// Whole words of one field, not substrings: CG must not approve CMA CGM, and a call-sign code
+// must not approve a name that happens to contain it.
 export function matchedPattern(v: Vessel, patterns: Pattern[]): Pattern | null {
-  const words = new Set(`${v.name} ${v.callsign}`.toLowerCase().split(/[\s/-]+/));
-  return patterns.find((p) => p.text !== "" && words.has(p.text.toLowerCase())) ?? null;
+  const words = { callsign: wordsOf(v.callsign), name: wordsOf(v.name) };
+  return patterns.find((p) => p.text !== "" && words[p.field].has(p.text.toLowerCase())) ?? null;
 }
 
 export function listsFor(vessels: Vessel[], config: Config): Lists {
@@ -55,7 +74,12 @@ export function parseConfig(text: string): Config | null {
   if (!patterns.every(isPattern) || !priority.every(isString) || !watch.every(isString))
     return null;
   return {
-    patterns: patterns.map(({ text, label }) => ({ text, label })),
+    // Configurations saved before patterns had a field matched names.
+    patterns: patterns.map(({ text, label, field }) => ({
+      text,
+      label,
+      field: field === "callsign" ? "callsign" : "name",
+    })),
     priority: new Set(priority),
     watch: new Set(watch),
   };

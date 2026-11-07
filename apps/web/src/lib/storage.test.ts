@@ -31,7 +31,7 @@ test("readConfig falls back to DEFAULT_CONFIG when the key is missing or malform
 test("writeConfig stores under vesselConfig and readConfig reads it back", () => {
   const { map, storage } = fake();
   const config: Config = {
-    patterns: [{ text: "WSF", label: "Washington State Ferries" }],
+    patterns: [{ text: "WSF", label: "Washington State Ferries", field: "name" }],
     priority: new Set(["a"]),
     watch: new Set(["b"]),
   };

@@ -7,10 +7,22 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useTheme } from "@/components/useTheme";
+import type { Day } from "@/lib/history";
+
+export type Mode = "replay" | "live" | "history";
+const MODE_LABEL: Record<Mode, string> = {
+  replay: "Recorded days",
+  live: "Live",
+  history: "History",
+};
 
 export type TopBarProps = {
-  mode: "replay" | "live";
-  onMode: (m: "replay" | "live") => void;
+  mode: Mode;
+  onMode: (m: Mode) => void;
+  // The archive's days, shown in History mode; null while they load.
+  days?: Day[] | null;
+  day?: Day | null;
+  onDay?: (d: Day | null) => void;
   playing: boolean;
   onPlay: () => void;
   speed: number;
@@ -90,7 +102,7 @@ export default function TopBar(p: TopBarProps) {
         </Button>
       </>
     );
-  const replay = p.mode === "replay";
+  const live = p.mode === "live";
   return (
     <header
       ref={header}
@@ -121,25 +133,45 @@ export default function TopBar(p: TopBarProps) {
         {/* Below xl, the playback controls drop to their own row under the logo and switches. */}
         <div className="order-last flex min-w-0 flex-1 basis-full flex-wrap items-center gap-2 xl:order-none xl:basis-0">
           <div role="group" aria-label="Mode" className="flex gap-1">
-            <Button
-              size="sm"
-              variant={replay ? "default" : "outline"}
-              aria-pressed={replay}
-              onClick={() => p.onMode("replay")}
-            >
-              Recorded days
-            </Button>
-            <Button
-              size="sm"
-              variant={replay ? "outline" : "default"}
-              aria-pressed={!replay}
-              onClick={() => p.onMode("live")}
-            >
-              Live
-            </Button>
+            {(Object.keys(MODE_LABEL) as Mode[]).map((m) => (
+              <Button
+                key={m}
+                size="sm"
+                variant={p.mode === m ? "default" : "outline"}
+                aria-pressed={p.mode === m}
+                onClick={() => p.onMode(m)}
+              >
+                {MODE_LABEL[m]}
+              </Button>
+            ))}
           </div>
-          {replay ? (
+          {live ? (
+            <span className="flex flex-1 items-center gap-2 truncate text-sm text-muted-foreground">
+              <span
+                aria-hidden
+                className={`size-2 shrink-0 rounded-full ${p.feedLive ? `bg-green-600 animate-pulse motion-reduce:animate-none` : "bg-muted-foreground"}`}
+              />
+              {p.feedText}
+            </span>
+          ) : (
             <>
+              {p.mode === "history" && (
+                <select
+                  aria-label="Day"
+                  className={selectClass}
+                  value={p.day?.from ?? ""}
+                  onChange={(e) =>
+                    p.onDay?.(p.days?.find((d) => d.from === Number(e.target.value)) ?? null)
+                  }
+                >
+                  <option value="">{p.days ? "Choose a day" : "Loading days"}</option>
+                  {p.days?.map((d) => (
+                    <option key={d.from} value={d.from}>
+                      {d.label}
+                    </option>
+                  ))}
+                </select>
+              )}
               <Button size="sm" variant="outline" onClick={p.onPlay}>
                 {p.playing ? <Pause /> : <Play />}
                 {p.playing ? "Pause" : "Play"}
@@ -190,14 +222,6 @@ export default function TopBar(p: TopBarProps) {
                 </Tooltip>
               )}
             </>
-          ) : (
-            <span className="flex flex-1 items-center gap-2 truncate text-sm text-muted-foreground">
-              <span
-                aria-hidden
-                className={`size-2 shrink-0 rounded-full ${p.feedLive ? `bg-green-600 animate-pulse motion-reduce:animate-none` : "bg-muted-foreground"}`}
-              />
-              {p.feedText}
-            </span>
           )}
           <span className="font-mono text-sm tabular-nums whitespace-nowrap">
             <span className={p.clockShort ? "max-sm:hidden" : ""}>{p.clockText}</span>

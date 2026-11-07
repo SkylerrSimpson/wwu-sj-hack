@@ -9,7 +9,7 @@ import FilterPanel from "@/components/FilterPanel";
 import Plots from "@/components/Plots";
 import SidePanel from "@/components/SidePanel";
 import SignOutButton from "@/components/SignOutButton";
-import TopBar from "@/components/TopBar";
+import TopBar, { type Mode } from "@/components/TopBar";
 import { useConfig } from "@/components/useConfig";
 import { useFilter } from "@/components/useFilter";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +28,7 @@ import type { Coverage, Path, Ship } from "@/components/ShipMap";
 import { labelOf, listsFor, moveTo } from "@/lib/config";
 import type { Data, Vessel } from "@/lib/data";
 import { directionAt } from "@/lib/heading";
+import { dayChoices, reportsUrl, thin, type Day, type Segment } from "@/lib/history";
 import { merge, parseRecord, type LiveRecord } from "@/lib/live";
 import { RADAR_RANGE_M, RADAR_SITES } from "@/lib/radar";
 import { callsignText } from "@/lib/privacy";
@@ -60,11 +61,13 @@ const TICK_MS = 250;
 const COVERAGE: Coverage[] = RADAR_SITES.map((s) => ({ ...s, rangeM: RADAR_RANGE_M }));
 const STREAMER = process.env.NEXT_PUBLIC_STREAMER_URL ?? "http://127.0.0.1:8787";
 const HEAT_COLS = 48;
+// The recording's box (south, west, north, east), the area the map shows.
+const BOX = "48.544,-122.974,48.895,-122.486";
+const ARCHIVE_DOWN = "The archive could not be reached. Try another day or reload the page.";
 const BANNER = "Approved list invented for this demo; no vessel shown is suspected of anything.";
 const CAVEAT =
   "Most small boats carry no AIS, so a boat can be in Lummi waters without an alert. Approximate boundary, not a legal boundary.";
 
-type Mode = "replay" | "live";
 type Feed = { status: string; last_message_age_s: number | null };
 // When the browser last heard anything from the streamer, so the age on screen keeps counting.
 type Heard = number | null;
@@ -162,12 +165,12 @@ export default function Replay() {
 // Owns the clock, the mode, the configuration, the selection, the entries and the overlay.
 // Every tick asks lib/vessel where each vessel is and which non-approved vessels crossed in.
 function ReplayView({ data }: { data: Data }) {
-  const start = Date.parse(data.window.start) / 1000;
-  const end = Date.parse(data.window.end) / 1000;
+  const replayStart = Date.parse(data.window.start) / 1000;
+  const replayEnd = Date.parse(data.window.end) / 1000;
   const demoStart = data.vessels.find((v) => v.id === "demo")?.track[0]?.[0];
 
   // Few vessels have a fix in the first minutes, so the map opens half an hour in.
-  const [t, setT] = useState(start + 1800);
+  const [t, setT] = useState(replayStart + 1800);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(600);
   const [config, setConfig] = useConfig();
@@ -188,8 +191,57 @@ function ReplayView({ data }: { data: Data }) {
   const [feed, setFeed] = useState<Feed | null>(null);
   const [heard, setHeard] = useState<Heard>(null);
   const [now, setNow] = useState(() => Date.now() / 1000);
+  // History mode: the archive's days, the chosen one, its vessels, and a loading or error line.
+  const [days, setDays] = useState<Day[] | null>(null);
+  const [day, setDay] = useState<Day | null>(null);
+  const [history, setHistory] = useState<Map<string, Vessel>>(new Map());
+  const [loading, setLoading] = useState<string | null>(null);
   // Each mode keeps its own "last tick", so switching modes never opens a giant entry window.
-  const prev = useRef<Record<Mode, number>>({ replay: start + 1800, live: Date.now() / 1000 });
+  const prev = useRef<Record<Mode, number>>({
+    replay: replayStart + 1800,
+    live: Date.now() / 1000,
+    history: 0,
+  });
+  // History plays the chosen day; the replay and an unchosen day play the recording's window.
+  const start = mode === "history" && day ? day.from : replayStart;
+  const end = mode === "history" && day ? day.to : replayEnd;
+
+  useEffect(() => {
+    if (mode !== "history" || days !== null) return;
+    fetch(`${STREAMER}/v1/coverage`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(r.statusText))))
+      .then((p: { segments?: Segment[] }) => setDays(dayChoices(p.segments ?? [])))
+      .catch(() => setLoading(ARCHIVE_DOWN));
+  }, [mode, days]);
+
+  // Pages of the day's raw reports, thinned to one fix per vessel per five minutes, so a day
+  // is a few hundred points per vessel, well under MAX_POINTS.
+  useEffect(() => {
+    if (mode !== "history" || !day) return;
+    const ctl = new AbortController();
+    setHistory(new Map());
+    setLoading("Loading the day from the archive");
+    (async () => {
+      let after: string | undefined;
+      let got = 0;
+      do {
+        const r = await fetch(reportsUrl(STREAMER, day.from, day.to, BOX, after), {
+          signal: ctl.signal,
+        });
+        if (!r.ok) throw new Error(r.statusText);
+        const p = (await r.json()) as { next?: string | null; reports?: unknown[] };
+        const records = thin((p.reports ?? []).flatMap((x) => parseRecord(x) ?? []));
+        setHistory((m) => records.reduce(merge, m));
+        got += p.reports?.length ?? 0;
+        setLoading(`Loading the day from the archive: ${got.toLocaleString()} reports so far`);
+        after = p.next ?? undefined;
+      } while (after);
+      setLoading(null);
+    })().catch(() => {
+      if (!ctl.signal.aborted) setLoading(ARCHIVE_DOWN);
+    });
+    return () => ctl.abort();
+  }, [mode, day]);
 
   useEffect(() => {
     if (mode !== "live") return;
@@ -241,7 +293,9 @@ function ReplayView({ data }: { data: Data }) {
   }, [mode]);
 
   const liveVessels = useMemo(() => [...live.values()], [live]);
-  const vessels = mode === "live" ? liveVessels : data.vessels;
+  const historyVessels = useMemo(() => [...history.values()], [history]);
+  const vessels =
+    mode === "live" ? liveVessels : mode === "history" ? historyVessels : data.vessels;
   const at = mode === "live" ? now : t;
   const lists = useMemo(() => listsFor(vessels, config), [vessels, config]);
   // The filter picks what the map and charts show; entries and alerts still use every vessel.
@@ -370,10 +424,18 @@ function ReplayView({ data }: { data: Data }) {
 
   const water = (
     <div className="space-y-3 text-sm">
+      {mode === "history" && (
+        <p role="status" className="text-xs text-muted-foreground">
+          {loading ?? (day ? null : "Choose a day in the top bar to load it from the archive.")}
+        </p>
+      )}
       <p className="text-xs text-muted-foreground">
         {mode === "live"
           ? "Live AIS from AISStream. Only vessels transmitting AIS and heard by this feed appear; a vessel can be there without being heard."
-          : `Recorded AIS, ${dayPacific.format(start * 1000)} to ${dayPacific.format(end * 1000)}, ${yearPacific.format(end * 1000)} (Pacific).`}{" "}
+          : mode === "history"
+            ? day &&
+              `Archived AIS from ${day.source === "noaa" ? "NOAA" : "AISStream"}, ${day.label} (UTC).`
+            : `Recorded AIS, ${dayPacific.format(start * 1000)} to ${dayPacific.format(end * 1000)}, ${yearPacific.format(end * 1000)} (Pacific).`}{" "}
         {ships.length} vessels on the map, {inWater} in Lummi waters.
       </p>
       <Table>
@@ -552,6 +614,22 @@ function ReplayView({ data }: { data: Data }) {
         onMode={(m) => {
           setMode(m);
           setPlaying(false);
+          // The clock may sit in the other mode's window; start half an hour into this one.
+          const from = m === "history" && day ? day.from : replayStart;
+          const to = m === "history" && day ? day.to : replayEnd;
+          if (t < from || t > to) setT(from + 1800);
+        }}
+        days={days}
+        day={day}
+        onDay={(d) => {
+          setPlaying(false);
+          // A new day drops the old day's entries; other modes' entries stay.
+          if (day) setEntries((e) => e.filter((x) => x.t < day.from || x.t >= day.to));
+          setDay(d);
+          if (d) {
+            setT(d.from + 1800);
+            prev.current.history = d.from + 1800;
+          }
         }}
         playing={playing}
         onPlay={() => {
@@ -565,7 +643,9 @@ function ReplayView({ data }: { data: Data }) {
         start={start}
         end={end}
         onSeek={setT}
-        onSkip={demoStart === undefined ? undefined : () => setT(demoStart - 300)}
+        onSkip={
+          demoStart === undefined || mode === "history" ? undefined : () => setT(demoStart - 300)
+        }
         clockText={clock.format(at * 1000)}
         clockShort={clockShort.format(at * 1000)}
         feedText={feedText}

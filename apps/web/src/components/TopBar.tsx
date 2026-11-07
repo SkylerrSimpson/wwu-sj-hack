@@ -135,9 +135,21 @@ export default function TopBar(p: TopBarProps) {
                 onChange={(e) => p.onSeek(Number(e.target.value))}
               />
               {p.onSkip && (
-                <Button size="sm" variant="ghost" onClick={p.onSkip}>
-                  Skip to the demo vessel
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        aria-label="Skip to the demo vessel"
+                        onClick={p.onSkip}
+                      />
+                    }
+                  >
+                    Demo
+                  </TooltipTrigger>
+                  <TooltipContent>Skip to the demo vessel</TooltipContent>
+                </Tooltip>
               )}
             </>
           ) : (

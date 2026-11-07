@@ -37,7 +37,8 @@ SOURCES = [
 ]
 
 # Invented for the demo: the Lummi Island ferry and the patrol boat, the two working vessels seen inside.
-PRIORITY = {"368011730", "338162321"}
+# The fleet name patterns (XWL, WSF, SWN, NKK) are the app's, matched on name and callsign at runtime.
+LISTED = {"368011730": "Whatcom County ferry", "338162321": "Law enforcement, listed"}
 
 TYPE_WORDS = {
     "30": "Fishing",
@@ -49,7 +50,7 @@ TYPE_WORDS = {
     "54": "Anti-pollution",
     "55": "Law enforcement",
 }
-PRIVATE = {"Sailing", "Pleasure craft"}
+PRIVATE = {"Fishing", "Sailing", "Pleasure craft"}
 
 
 class Vessel(TypedDict):
@@ -58,6 +59,8 @@ class Vessel(TypedDict):
     name: str
     type: str
     length_m: int | None
+    callsign: str
+    fleet: str | None
     priority: bool
     track: list[list[float]]
 
@@ -100,8 +103,9 @@ def tracks(rows: list[dict[str, str]]) -> list[Vessel]:
         seen.add((r["MMSI"], t // STEP))
         kind = type_word(r["VesselType"])
         length = int(float(r["Length"])) if r["Length"] else None
+        private = kind in PRIVATE
         name = r["VesselName"].strip()
-        if kind in PRIVATE or not name:
+        if private or not name:
             name = f"{kind}, {length} m" if length else kind
         v = vessels.setdefault(
             r["MMSI"],
@@ -111,22 +115,29 @@ def tracks(rows: list[dict[str, str]]) -> list[Vessel]:
                 "name": name,
                 "type": kind,
                 "length_m": length,
-                "priority": r["MMSI"] in PRIORITY,
+                "callsign": "" if private else r["CallSign"].strip(),
+                "fleet": LISTED.get(r["MMSI"]),
+                "priority": r["MMSI"] in LISTED,
                 "track": [],
             },
         )
         v["track"].append([t, round(float(r["LON"]), 5), round(float(r["LAT"]), 5)])
     for v in vessels.values():
         v["track"].sort()
-    return [vessels[k] for k in sorted(vessels)]
+    anonymous = [vessels[k] for k in sorted(vessels) if vessels[k]["type"] in PRIVATE]
+    for n, v in enumerate(anonymous, 1):
+        v["id"] = f"private-{n}"
+    return sorted(vessels.values(), key=lambda v: v["id"])
 
 
 def demo_vessel(start: int, ring: list[list[float]]) -> Vessel:
-    """Crosses the Gooseberry Point to Sandy Point line into Lummi Bay, 13:00 to 14:00 UTC on day one."""
+    """Crosses the Gooseberry Point to Sandy Point line into Lummi Bay at 13:30 UTC on day one,
+    backs out, and crosses in again at 14:30; k counts steps east along that line."""
     t0 = start + 13 * 3600
+    steps_east = [*range(9), *range(7, 1, -1), *range(3, 9)]
     track: list[list[float]] = [
-        [t0 + i * STEP, round(-122.745 + i * 0.0075, 5), round(48.775 - i * 0.0005, 5)]
-        for i in range(13)
+        [t0 + i * STEP, round(-122.745 + k * 0.0075, 5), round(48.775 - k * 0.0005, 5)]
+        for i, k in enumerate(steps_east)
     ]
     assert not inside(track[0][1], track[0][2], ring) and inside(track[-1][1], track[-1][2], ring)
     return {
@@ -135,6 +146,8 @@ def demo_vessel(start: int, ring: list[list[float]]) -> Vessel:
         "name": "Demo vessel (synthetic)",
         "type": "Fishing",
         "length_m": 21,
+        "callsign": "",
+        "fleet": None,
         "priority": False,
         "track": track,
     }

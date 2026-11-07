@@ -50,7 +50,17 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["id", "source", "name", "type", "length_m", "priority", "track"],
+        "required": [
+          "id",
+          "source",
+          "name",
+          "type",
+          "length_m",
+          "callsign",
+          "fleet",
+          "priority",
+          "track"
+        ],
         "additionalProperties": false,
         "properties": {
           "id": { "type": "string", "minLength": 1 },
@@ -58,7 +68,9 @@
           "name": { "type": "string", "minLength": 1 },
           "type": { "type": "string", "minLength": 1 },
           "length_m": { "type": ["integer", "null"] },
-          "priority": { "type": "boolean" },
+          "callsign": { "type": "string", "$comment": "empty when unknown or anonymised" },
+          "fleet": { "type": ["string", "null"] },
+          "priority": { "type": "boolean", "$comment": "true exactly when fleet is set" },
           "track": {
             "type": "array",
             "minItems": 1,

@@ -12,18 +12,21 @@ Anyone who uses this data will ask: where did it come from, how clean is it, wha
 
 `data/raw/` holds the event's AIS file zipped and the KML as given. The organizers' files arrived with their names swapped (the `.jpg` was the KML, the `.txt` was the CSV); `raw/` uses the names of what they are.
 
+The committed zip is not the original byte for byte: a one-off script (not in `build.py`) read the event's CSV, blanked `VesselName`, `IMO` and `CallSign` on every row whose `VesselType` is 30, 36 or 37 (fishing, sailing, pleasure craft), kept every other column and all 219,863 rows, and wrote the result as the single entry `ais-2024-12-05-to-09.csv`, deflate level 9. The original stays in `data/lummifiles/`, which git ignores. A test reads the zip and refuses any private row with a name, IMO or call sign.
+
 ## Cleaning
 
-- 99 exact duplicate rows dropped, and one position kept per vessel per 5 minutes: 219,863 rows become 124,458 positions.
+- 99 exact duplicate rows dropped, and one position kept per vessel per 5 minutes: 219,863 rows become 124,445 positions, plus 21 for the synthetic vessel.
 - AIS type codes recoded to words (30 Fishing; 31, 32, 52 Tug; 36 Sailing; 37 Pleasure craft; 55 Law enforcement; 60s Passenger; 70s Cargo; 80s Tanker; anything else Other).
-- Private boats (sailing and pleasure craft) are named by type and length only, such as "Pleasure craft, 14 m". AIS is public, but a private boat's name identifies its owner. Commercial vessels keep their AIS name. A vessel with no name gets its type.
-- The priority list is invented for the demo: the Lummi Island ferry _Whatcom Chief_ (368011730) and the patrol boat _Lengesot_ (338162321). The real list is the Nation's.
-- One synthetic vessel, "Demo vessel (synthetic)", crosses into Lummi Bay between 13:00 and 14:00 UTC on Dec 5. In five real days no vessel outside the priority list enters the reservation, so without it the demo has nothing to alert on, and alerting on a real boat against an invented list would be a false statement.
+- Private boats (fishing, sailing and pleasure craft, AIS types 30, 36 and 37: 147 of the 224 vessels) are anonymised: named by type and length only, such as "Fishing, 24 m", with an empty `callsign` and ids `private-1` to `private-147` given in sorted-MMSI order, so nobody can look one up. AIS is public, but a private boat's name, call sign or MMSI identifies its owner. Commercial vessels keep their AIS name, call sign and MMSI as id. A vessel with no name gets its type. Vessels are sorted by id, so `private-10` comes before `private-2`.
+- `fleet` is set from an explicit list invented for the demo: the Lummi Island ferry _Whatcom Chief_ (368011730) is "Whatcom County ferry" and the patrol boat _Lengesot_ (338162321) is "Law enforcement, listed"; everyone else is null, and `priority` is true exactly when `fleet` is set. The name patterns the PM gave (XWL Lummi Nation, WSF Washington State Ferries, SWN Swinomish, NKK Nooksack) are not applied here: the app matches them against `name` and `callsign` at runtime, so the officer can change them. In this data no name or call sign contains XWL, SWN or NKK; four WSF ferries do (_Chelan_, _Yakima_, _Kaleetan_, _Tillikum_), and they are not priority in `data.json`. The real list is the Nation's.
+- One synthetic vessel, "Demo vessel (synthetic)", crosses into Lummi Bay twice on Dec 5 UTC, in 5-minute steps: inside from 13:30, back out from 13:55, inside again from 14:30 to 14:40. In five real days no vessel outside the priority list enters the reservation, so without it the demo has nothing to alert on, and alerting on a real boat against an invented list would be a false statement. The second crossing lets the demo show a second alert on a vessel the officer has already seen.
 - Example of the rules getting it wrong: two pleasure craft moored at the Sandy Point marina sit inside the boundary for all five days. They never "enter", so they never alert, but any rule that counted time inside would count them.
 
 ## Gaps
 
 - Only four real vessels transmit from inside the reservation in five days: the ferry, the patrol boat, and the two moored pleasure craft. Most fishing and recreational boats under 65 ft are not required to carry AIS, so no alert does not mean no unapproved boat was there.
+- A private boat's fleet cannot be read from this data: its name and call sign are blanked before the app sees them, so a Lummi Nation fishing boat with XWL in its call sign would alert like anyone else. None exists in these five days; the Nation's own list would fix it by MMSI.
 - 64% of positions are from Class B transmitters, which send no navigational status, so "anchored" cannot be read from the data for them.
 - December is not salmon season. The busiest traffic near the boundary is tugs waiting and anchoring 0.6 to 1.3 km outside its north-west edge, off Cherry Point.
 - The boundary is approximate. It agrees with the Census Bureau's reservation polygon on every one of the 219,863 positions, but neither is a legal determination.

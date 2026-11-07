@@ -1,11 +1,12 @@
 import json
+from itertools import pairwise
 
-from build import build, demo_vessel, fetch, inside, ring_from_kml, tracks, type_word
+from build import build, demo_vessel, fetch, inside, ring_from_kml, stamp, tracks, type_word
 from check import OUT, problems_in
 
 
 def row(
-    mmsi: str, t: str, lat: float, lon: float, name="", vtype="30", length="20"
+    mmsi: str, t: str, lat: float, lon: float, name="", vtype="30", length="20", call=""
 ) -> dict[str, str]:
     return {
         "MMSI": mmsi,
@@ -13,6 +14,7 @@ def row(
         "LAT": str(lat),
         "LON": str(lon),
         "VesselName": name,
+        "CallSign": call,
         "VesselType": vtype,
         "Length": length,
     }
@@ -54,42 +56,70 @@ def test_tracks_keep_one_position_per_vessel_per_five_minutes_and_drop_duplicate
     ]
 
 
-def test_tracks_name_private_boats_by_type_and_length_only() -> None:
+def test_tracks_anonymise_private_boats_by_type_length_and_numbered_id() -> None:
+    t = "2024-12-05T00:00:00"
     rows = [
         row(
-            "1",
-            "2024-12-05T00:00:00",
+            "367500000",
+            t,
             48.7,
             -122.6,
             name="MADE UP BOAT",
             vtype="37",
             length="14",
+            call="WXX0000",
         ),
+        row("366999999", t, 48.7, -122.6, name="NORTHERN STAR", vtype="30", length="24"),
+        row("316000001", t, 48.7, -122.6, name="", vtype="36", length=""),
         row(
-            "2", "2024-12-05T00:00:00", 48.7, -122.6, name="NORTHERN STAR", vtype="30", length="24"
+            "366709770",
+            t,
+            48.7,
+            -122.6,
+            name="WSF CHELAN",
+            vtype="60",
+            length="100",
+            call="WCX7878",
         ),
-        row("3", "2024-12-05T00:00:00", 48.7, -122.6, name="", vtype="36", length=""),
     ]
-    assert [(v["name"], v["length_m"]) for v in tracks(rows)] == [
-        ("Pleasure craft, 14 m", 14),
-        ("NORTHERN STAR", 24),
-        ("Sailing", None),
+    assert [(v["id"], v["name"], v["length_m"], v["callsign"]) for v in tracks(rows)] == [
+        ("366709770", "WSF CHELAN", 100, "WCX7878"),
+        ("private-1", "Sailing", None, ""),
+        ("private-2", "Fishing, 24 m", 24, ""),
+        ("private-3", "Pleasure craft, 14 m", 14, ""),
     ]
 
 
-def test_tracks_mark_the_priority_list() -> None:
+def test_tracks_label_only_the_listed_vessels_and_priority_follows() -> None:
+    t = "2024-12-05T00:00:00"
     rows = [
-        row("368011730", "2024-12-05T00:00:00", 48.7, -122.6, name="WHATCOM CHIEF", vtype="60"),
-        row("1", "2024-12-05T00:00:00", 48.7, -122.6),
+        row("366709770", t, 48.7, -122.6, name="WSF CHELAN", vtype="60", call="WCX7878"),
+        row("338162321", t, 48.7, -122.6, name="LENGESOT", vtype="55"),
+        row("368011730", t, 48.7, -122.6, name="WHATCOM CHIEF", vtype="60", call="WDJ7956"),
     ]
-    assert [v["priority"] for v in tracks(rows)] == [False, True]
+    assert [(v["id"], v["fleet"], v["priority"]) for v in tracks(rows)] == [
+        ("338162321", "Law enforcement, listed", True),
+        ("366709770", None, False),
+        ("368011730", "Whatcom County ferry", True),
+    ]
 
 
-def test_demo_vessel_starts_outside_lummi_waters_and_ends_inside() -> None:
+def test_demo_vessel_enters_lummi_waters_twice_an_hour_apart() -> None:
     ring = ring_from_kml(fetch()[1])
     track = demo_vessel(1733356800, ring)["track"]
-    assert not inside(track[0][1], track[0][2], ring)
-    assert inside(track[-1][1], track[-1][2], ring)
+    flags = [inside(lon, lat, ring) for _, lon, lat in track]
+    entries = [stamp(int(p[0])) for p, (a, b) in zip(track[1:], pairwise(flags)) if b and not a]
+    assert entries == ["2024-12-05T13:30:00Z", "2024-12-05T14:30:00Z"]
+
+
+def test_raw_ais_carries_no_name_imo_or_call_sign_for_private_types() -> None:
+    rows = fetch()[0]
+    assert {r["VesselType"] for r in rows} > {"30", "36", "37"}
+    assert all(
+        r["VesselName"] == r["IMO"] == r["CallSign"] == ""
+        for r in rows
+        if r["VesselType"] in {"30", "36", "37"}
+    )
 
 
 def test_build_output_matches_the_schema() -> None:

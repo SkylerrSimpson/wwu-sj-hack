@@ -117,7 +117,12 @@ function ReplayView({ data }: { data: Data }) {
     prevT.current = t;
     if (t <= from) return;
     const found = newEntries(data.vessels, data.boundary.ring, from, t, lists);
-    if (found.length) setEntries((e) => [...e, ...found]);
+    if (!found.length) return;
+    // Scrubbing back and playing again crosses the same fixes; the alert log must not repeat them.
+    setEntries((e) => {
+      const seen = new Set(e.map((x) => `${x.vesselId}:${x.t}`));
+      return [...e, ...found.filter((x) => !seen.has(`${x.vesselId}:${x.t}`))];
+    });
   }, [t, data, lists]);
 
   const suspicious = new Set(

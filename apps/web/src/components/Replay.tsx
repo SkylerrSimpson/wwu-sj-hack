@@ -41,7 +41,8 @@ const TICK_MS = 250;
 const COVERAGE: Coverage[] = RADAR_SITES.map((s) => ({ ...s, rangeM: RADAR_RANGE_M }));
 const STREAMER = process.env.NEXT_PUBLIC_STREAMER_URL ?? "http://127.0.0.1:8787";
 const BANNER = "Approved list invented for this demo; no vessel shown is suspected of anything.";
-const CAVEAT = "Approximate boundary, not a legal boundary.";
+const CAVEAT =
+  "Most small boats carry no AIS, so no alert does not mean no boat. Approximate boundary, not a legal boundary.";
 
 type Mode = "replay" | "live";
 type Feed = { status: string; last_message_age_s: number | null };
@@ -449,6 +450,7 @@ function ReplayView({ data }: { data: Data }) {
         onSkip={demoStart === undefined ? undefined : () => setT(demoStart - 300)}
         clockText={clock.format(at * 1000)}
         feedText={feedText}
+        feedLive={mode === "live" && feed?.status === "live"}
         showPaths={showPaths}
         onShowPaths={setShowPaths}
         showRadar={radarOn}

@@ -121,7 +121,11 @@ export default function SidePanel({
         value={tab}
         onValueChange={(v) => onTab?.(v as SidePanelTab)}
         style={{ width }}
-        className={cn("gap-0 border-r bg-background", collapsed ? "hidden" : "", className)}
+        className={cn(
+          "gap-0 border-r bg-background animate-in fade-in slide-in-from-left-2 duration-200 motion-reduce:animate-none",
+          collapsed ? "hidden" : "",
+          className,
+        )}
       >
         {/* Drag to resize, or focus and use the arrow keys; double-click resets. */}
         <div
@@ -176,7 +180,7 @@ export default function SidePanel({
             key={key}
             value={key}
             keepMounted
-            className="min-h-0 flex-1 overflow-y-auto p-3"
+            className="min-h-0 flex-1 overflow-y-auto p-3 animate-in fade-in duration-200 motion-reduce:animate-none"
           >
             {panes[key]}
           </TabsContent>

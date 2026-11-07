@@ -11,7 +11,7 @@ export default function SignIn() {
   const [state, action, pending] = useActionState<{ error: string } | null, FormData>(signIn, null);
 
   return (
-    <Card className="w-full max-w-sm">
+    <Card className="w-full max-w-sm animate-in fade-in zoom-in-95 duration-300 motion-reduce:animate-none">
       <CardHeader>
         <CardTitle>Lummi Vessel Tracker</CardTitle>
       </CardHeader>
@@ -31,7 +31,10 @@ export default function SignIn() {
               required
             />
           </div>
-          <p role="alert" className="text-sm text-destructive">
+          <p
+            role="alert"
+            className="text-sm text-destructive animate-in fade-in duration-200 motion-reduce:animate-none"
+          >
             {state?.error}
           </p>
           <Button type="submit" className="w-full" disabled={pending}>

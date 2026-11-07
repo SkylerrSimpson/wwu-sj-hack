@@ -21,7 +21,7 @@ export default function SettingsView({ vessels }: { vessels: { id: string; name:
       <p className="bg-amber-100 px-4 py-1 text-xs text-amber-900">
         Approved list invented for this demo; no vessel shown is suspected of anything.
       </p>
-      <main className="mx-auto w-full max-w-3xl flex-1 space-y-4 p-4">
+      <main className="mx-auto w-full max-w-3xl flex-1 space-y-4 p-4 animate-in fade-in slide-in-from-bottom-1 duration-300 motion-reduce:animate-none">
         <header className="flex items-start justify-between gap-4">
           <h1 className="text-2xl font-semibold">Settings</h1>
           <Button variant="outline" render={<Link href="/map" />}>

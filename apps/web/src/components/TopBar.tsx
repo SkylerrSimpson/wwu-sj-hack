@@ -23,6 +23,7 @@ export type TopBarProps = {
   onSkip?: () => void;
   clockText: string;
   feedText?: string;
+  feedLive?: boolean;
   showPaths: boolean;
   onShowPaths: (b: boolean) => void;
   showRadar: boolean;
@@ -57,7 +58,9 @@ export default function TopBar(p: TopBarProps) {
     );
   const replay = p.mode === "replay";
   return (
-    <header className={`fixed inset-x-0 top-0 ${Z}`}>
+    <header
+      className={`fixed inset-x-0 top-0 ${Z} animate-in fade-in slide-in-from-top-2 duration-200 motion-reduce:animate-none`}
+    >
       <div className="flex h-12 items-center gap-3 border-b bg-background px-3">
         <Tooltip>
           <TooltipTrigger
@@ -138,7 +141,13 @@ export default function TopBar(p: TopBarProps) {
               )}
             </>
           ) : (
-            <span className="flex-1 truncate text-sm text-muted-foreground">{p.feedText}</span>
+            <span className="flex flex-1 items-center gap-2 truncate text-sm text-muted-foreground">
+              <span
+                aria-hidden
+                className={`size-2 shrink-0 rounded-full ${p.feedLive ? `bg-green-600 animate-pulse motion-reduce:animate-none` : "bg-muted-foreground"}`}
+              />
+              {p.feedText}
+            </span>
           )}
           <span className="font-mono text-sm tabular-nums whitespace-nowrap">{p.clockText}</span>
         </div>

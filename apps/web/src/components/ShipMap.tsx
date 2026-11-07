@@ -15,10 +15,10 @@ export type Ship = {
 export type Path = { id: string; status: ShipStatus; latLngs: [number, number][] };
 
 const STATUS_COLOR: Record<ShipStatus, string> = {
-  priority: "#1d4ed8",
+  priority: "#15803d",
   watch: "#b91c1c",
   suspicious: "#d97706",
-  unlisted: "#525252",
+  unlisted: "#737373",
 };
 
 // The only module that knows Leaflet. Loaded with ssr: false, because Leaflet touches window on import.

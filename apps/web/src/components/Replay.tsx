@@ -72,14 +72,15 @@ function ReplayView({ data }: { data: Data }) {
   const end = Date.parse(data.window.end) / 1000;
   const demoStart = data.vessels.find((v) => v.id === "demo")?.track[0]?.[0];
 
-  const [t, setT] = useState(start);
+  // Few vessels have a fix in the first minutes, so the map opens half an hour in.
+  const [t, setT] = useState(start + 1800);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(600);
   const [config, setConfig] = useState<Config>(DEFAULT_CONFIG);
   const [selected, setSelected] = useState<string | null>(null);
   const [showPaths, setShowPaths] = useState(false);
   const [entries, setEntries] = useState<Entry[]>([]);
-  const prevT = useRef(start);
+  const prevT = useRef(start + 1800);
   const loaded = useRef(false);
 
   useEffect(() => {
@@ -210,7 +211,7 @@ function ReplayView({ data }: { data: Data }) {
         />
         <p className="mt-1 text-xs text-neutral-600">
           Recorded AIS, {data.window.start.slice(0, 10)} to {data.window.end.slice(0, 10)} (UTC);{" "}
-          {ships.length} vessels transmitting now. Blue: {STATUS_WORD.priority}. Red:{" "}
+          {ships.length} vessels transmitting now. Green: {STATUS_WORD.priority}. Red:{" "}
           {STATUS_WORD.watch}. Orange: {STATUS_WORD.suspicious}. Grey: {STATUS_WORD.unlisted}. Hover
           a dot for its name and status.
         </p>

@@ -54,19 +54,29 @@ Set these in `.env`.
 
 To run without Docker, for development: `uv sync`, then `AIS_API_KEY=... STREAMER_DB=data/ais.db uv run python -m streamer`. Without `STREAMER_DB`, nothing is recorded.
 
-### Expose it
+### Host it for the team
 
-The live site needs public HTTPS. Tailscale Funnel gives it for free, with no domain, no open router ports and no proxy to configure: run `sudo tailscale funnel --bg 8787` on the host, and it prints a stable `https://<host>.<tailnet>.ts.net` address that forwards to the streamer. With nginx instead, turn proxy buffering off for `/v1/stream` (`proxy_buffering off;`), or events arrive in lumps.
+`deploy/` runs three containers as one stack: the streamer, a Tailscale device called `lummi` that gives it public HTTPS through Funnel, and an updater that pulls `main` each minute and rebuilds the streamer when files under `apps/streamer` changed. The team deploys by pushing to `main` and never needs access to the host. The host needs Docker and git and nothing else: no open ports, no domain, no proxy, no cron, and its own Tailscale and firewall stay untouched.
 
-### Keep it up to date
-
-`deploy/update.sh` pulls `main` and rebuilds the streamer when files under `apps/streamer` changed. Run it from cron each minute, and the team deploys by pushing to `main`, with no access to the host:
+Everything the host keeps sits in one folder, here `~/lummi`:
 
 ```sh
-( crontab -l 2>/dev/null; echo "* * * * * sh $PWD/deploy/update.sh >> $HOME/streamer-deploy.log 2>&1" ) | crontab -
+mkdir ~/lummi && cd ~/lummi
+ssh-keygen -q -t ed25519 -f deploy_key -N "" -C "lummi@$(hostname)"
+cat deploy_key.pub   # a repo admin adds this under Settings > Deploy keys, write access off
+git clone -c core.sshCommand="ssh -i $PWD/deploy_key -o UserKnownHostsFile=$PWD/known_hosts -o StrictHostKeyChecking=accept-new"   git@github.com:SkylerrSimpson/wwu-sj-hack.git repo
+cp repo/apps/streamer/streamer.env.example streamer.env && chmod 600 streamer.env   # add the AISStream key
+mkdir -m 700 data    # or copy in an existing data folder: ais.db and id_salt.txt
+C=repo/apps/streamer/deploy/compose.sh
+sh $C run --rm login   # open the link it prints and sign in; it exits once that is done
+sh $C up -d
 ```
 
-Anyone who can push to `main` changes what runs on the host, inside an unprivileged container. To review each deploy instead, remove the cron line and run the script by hand. A read-only deploy key is enough for the host to pull.
+The address is `https://lummi.<tailnet>.ts.net`, shown in the Tailscale admin console. On the host, the streamer also answers on `127.0.0.1:8790`. `sh $C ps`, `sh $C logs -f streamer` and `sh $C logs updater` show what it's doing. `sh $C down -v` removes every container and the Tailscale device's state, and deleting the folder removes the rest.
+
+Anyone who can push to `main` changes what runs on the host, inside unprivileged containers apart from the updater, which drives Docker. To approve each deploy instead, run `sh $C stop updater` and run `sh repo/apps/streamer/deploy/update.sh` by hand.
+
+With nginx or another proxy instead of Funnel, turn proxy buffering off for `/v1/stream` (`proxy_buffering off;`), or events arrive in lumps.
 
 ## API
 

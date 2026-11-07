@@ -29,6 +29,18 @@ services:
     depends_on: [streamer]
     logging: *logging
 
+  # One-time sign-in: `compose.sh run --rm login`. The funnel service gives up on a sign-in link
+  # after a minute and starts over with a new one; this one waits until it is used.
+  login:
+    image: tailscale/tailscale:v1.104.2
+    profiles: [setup]
+    volumes:
+      - tailscale:/var/lib/tailscale
+    command:
+      - sh
+      - -c
+      - tailscaled --tun=userspace-networking --statedir=/var/lib/tailscale --socket=/tmp/ts.sock >/dev/null 2>&1 & sleep 3; tailscale --socket=/tmp/ts.sock up --hostname=lummi --timeout=0
+
   updater:
     build:
       context: .

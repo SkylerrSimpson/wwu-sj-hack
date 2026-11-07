@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Eye, EyeOff, Pause, Play } from "lucide-react";
+import { Eye, EyeOff, Menu, Pause, Play } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -59,17 +59,19 @@ export default function TopBar(p: TopBarProps) {
             render={
               <Link
                 href="/settings"
-                className={buttonVariants({ variant: "ghost", size: "sm", className: "px-2" })}
+                aria-label="Settings"
+                className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
               />
             }
           >
-            <span className="font-bold">LVT</span>
-            <span className="hidden font-normal text-muted-foreground md:inline">
-              Lummi Vessel Tracker
-            </span>
+            <Menu />
           </TooltipTrigger>
           <TooltipContent side="bottom">Settings</TooltipContent>
         </Tooltip>
+        <span className="text-sm whitespace-nowrap">
+          <span className="font-bold">LVT</span>{" "}
+          <span className="hidden text-muted-foreground md:inline">Lummi Vessel Tracker</span>
+        </span>
 
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <div role="group" aria-label="Mode" className="flex gap-1">

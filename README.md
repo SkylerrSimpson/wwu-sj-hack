@@ -14,6 +14,8 @@ Node 24: https://nodejs.org. pnpm: `npm i -g pnpm` or https://pnpm.io/installati
 
 The site opens on a sign-in screen: any username, and the password set as `LVT_DEMO_PASSWORD` in `apps/web/.env.local` (and in Vercel's environment for the live site). It is a demo gate, not accounts.
 
+Cloudflare Turnstile guards both Sign in and Enter as guest once `NEXT_PUBLIC_TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` are set (in `apps/web/.env.local`, and in Vercel's environment for the live site); with neither set it is off. Cloudflare's test keys, `1x00000000000000000000AA` and `1x0000000000000000000000000000000AA`, always pass.
+
 Email alerts need a free [Resend](https://resend.com) key in `apps/web/.env.local` as `RESEND_API_KEY=...`; the test sender only delivers to the Resend account owner's inbox.
 
 Live mode needs the streamer running: `cd apps/streamer && uv sync && AIS_API_KEY=... uv run python -m streamer` (see `apps/streamer/README.md`); the web app reads it at `http://127.0.0.1:8787`, or at `NEXT_PUBLIC_STREAMER_URL` if set.

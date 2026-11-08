@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { signIn } from "@/app/auth";
+import { enterAsGuest, signIn } from "@/app/auth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -42,9 +42,15 @@ export default function SignIn() {
           </Button>
         </form>
       </CardContent>
-      <CardFooter>
+      <CardFooter className="flex-col items-stretch gap-3">
+        <form action={enterAsGuest}>
+          <Button type="submit" variant="outline" className="w-full">
+            Enter as guest
+          </Button>
+        </form>
         <p className="text-sm text-muted-foreground">
-          Demo sign-in: any username and the team password.
+          Demo sign-in: any username and the team password. Guests can look around but can&apos;t
+          send email alerts.
         </p>
       </CardFooter>
     </Card>

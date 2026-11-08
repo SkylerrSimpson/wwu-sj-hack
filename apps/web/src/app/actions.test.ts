@@ -7,9 +7,13 @@ import { sendAlert } from "./actions";
 const send = vi.hoisted(() =>
   vi.fn<(mail: CreateEmailOptions) => Promise<{ error: { message: string } | null }>>(),
 );
-const signedIn = vi.hoisted(() => ({ value: true }));
+// The lvt cookie's value: a session id, "guest", or undefined when signed out.
+const session = vi.hoisted(() => ({ value: "session-id" as string | undefined }));
 vi.mock("next/headers", () => ({
-  cookies: async () => ({ has: (name: string) => name === "lvt" && signedIn.value }),
+  cookies: async () => ({
+    get: (name: string) =>
+      name === "lvt" && session.value !== undefined ? { value: session.value } : undefined,
+  }),
 }));
 vi.mock("resend", () => ({
   Resend: class {
@@ -31,7 +35,7 @@ beforeEach(() => {
   send.mockReset();
   send.mockResolvedValue({ error: null });
   process.env.RESEND_API_KEY = "re_test";
-  signedIn.value = true;
+  session.value = "session-id";
 });
 
 test("a bad address is refused on the server and nothing is sent", async () => {
@@ -87,7 +91,7 @@ test("a network failure comes back as the result too", async () => {
 });
 
 test("a caller without the sign-in cookie is refused and nothing is sent", async () => {
-  signedIn.value = false;
+  session.value = undefined;
   expect(await sendAlert("staff@example.org", entry)).toEqual({
     ok: false,
     error: "Sign in to send alerts",
@@ -104,4 +108,13 @@ test("an entry with an impossible position is refused and a long name is cut to 
   const mail = send.mock.calls[0]?.[0];
   expect(String(mail?.text)).toContain("x".repeat(80) + ",");
   expect(String(mail?.text)).not.toContain("x".repeat(81));
+});
+
+test("a guest is told to sign in and nothing is sent", async () => {
+  session.value = "guest";
+  expect(await sendAlert("officer@lummi-nsn.gov", entry)).toEqual({
+    ok: false,
+    error: "Guests can't send email alerts: sign in to send them",
+  });
+  expect(send).not.toHaveBeenCalled();
 });

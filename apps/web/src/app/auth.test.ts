@@ -1,5 +1,5 @@
 import { beforeEach, expect, test, vi } from "vitest";
-import { signIn } from "./auth";
+import { enterAsGuest, signIn } from "./auth";
 
 // Typed by what auth.ts calls, not Next's full cookie store.
 const cookieStore = vi.hoisted(() => ({
@@ -45,4 +45,15 @@ test("without LVT_DEMO_PASSWORD the caller is told and nobody gets in", async ()
   delete process.env.LVT_DEMO_PASSWORD;
   expect(await signIn(null, form("staff", ""))).toEqual({ error: "LVT_DEMO_PASSWORD is not set" });
   expect(cookieStore.set).not.toHaveBeenCalled();
+});
+
+test("entering as a guest needs no password, sets a guest cookie and redirects to the map", async () => {
+  delete process.env.LVT_DEMO_PASSWORD;
+  await enterAsGuest();
+  expect(cookieStore.set).toHaveBeenCalledWith(
+    "lvt",
+    "guest",
+    expect.objectContaining({ httpOnly: true, sameSite: "lax", path: "/", maxAge: 12 * 60 * 60 }),
+  );
+  expect(redirect).toHaveBeenCalledWith("/map");
 });

@@ -21,7 +21,10 @@ export async function sendAlert(
   entry: Entry,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   // Server functions answer direct POSTs too, so the sign-in cookie is checked here as well.
-  if (!(await cookies()).has("lvt")) return { ok: false, error: "Sign in to send alerts" };
+  const session = (await cookies()).get("lvt")?.value;
+  if (!session) return { ok: false, error: "Sign in to send alerts" };
+  if (session === "guest")
+    return { ok: false, error: "Guests can't send email alerts: sign in to send them" };
   if (
     ![entry.t, entry.lat, entry.lon].every(Number.isFinite) ||
     Math.abs(entry.lat) > 90 ||
